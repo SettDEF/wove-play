@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- monochrome WAVV "W" monogram + tail for Android 13+ themed icons -->
+  <path d="M208,360 C258,548 304,648 352,712 C400,628 438,558 472,484 C506,558 544,628 592,712 C640,648 686,548 734,360 C760,470 786,494 824,452"
+        fill="none" stroke="#ffffff" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

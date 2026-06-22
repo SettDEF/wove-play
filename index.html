@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0f1411" />
+    <!-- Montserrat is used ONLY by the visualizer canvas (which already has font fallbacks). Loading it
+         as a normal <link> in <head> is render-blocking — it stalled the FIRST PAINT on a font the launch
+         screen never uses (and froze launch entirely with no/slow network). Load it asynchronously so it
+         never blocks the app appearing; it swaps in by the time the visualizer needs it. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&display=swap" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&display=swap" /></noscript>
+    <title>Wove</title>
+    <!-- Instant boot splash: pure inline HTML+CSS, ZERO JavaScript. The WebView paints this the moment it
+         has the document — long before the ~170 KB JS bundle parses — so the OS launcher-icon splash hands
+         off to the themed app shell almost immediately instead of a white/blank screen. React replaces
+         #root's contents on its first commit, which removes the splash automatically. -->
+    <style>
+      html, body { margin: 0; height: 100%; background: #0f1411; }
+      #boot {
+        position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+        background: #0f1411; z-index: 2147483647;
+      }
+      #boot .boot-eq { display: flex; align-items: flex-end; gap: 7px; height: 46px; }
+      #boot .boot-eq i {
+        display: block; width: 7px; height: 100%; border-radius: 4px;
+        background: linear-gradient(#7ee0a8, #34a06a);
+        transform-origin: bottom; animation: bootBar 1s ease-in-out infinite;
+      }
+      #boot .boot-eq i:nth-child(2) { animation-delay: .15s; }
+      #boot .boot-eq i:nth-child(3) { animation-delay: .3s; }
+      #boot .boot-eq i:nth-child(4) { animation-delay: .45s; }
+      @keyframes bootBar { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+      @media (prefers-reduced-motion: reduce) { #boot .boot-eq i { animation: none; transform: scaleY(.6); } }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div id="boot"><div class="boot-eq"><i></i><i></i><i></i><i></i></div></div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

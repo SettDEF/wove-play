@@ -1,0 +1,16 @@
+[package]
+name = "wavr-audio"
+version = "0.1.0"
+description = "Wove native audio engine — symphonia decode → DSP → cpal/oboe output. The Poweramp-grade path (hi-res, seamless gapless/crossfade); replaces Web Audio playback behind a flag."
+edition = "2021"
+rust-version = "1.77.2"
+license = "MIT"
+
+[lib]
+name = "wavr_audio"
+
+[dependencies]
+# decode (same codec set as the host) + low-level output. cpal targets AAudio/OpenSL
+# on Android already; oboe gets swapped in for exclusive/hi-res in slice S4.
+symphonia = { version = "0.5", features = ["mp3", "isomp4", "aac", "alac", "flac", "ogg", "vorbis", "wav", "pcm", "adpcm"] }
+cpal = "0.15"

@@ -1,0 +1,43 @@
+@use "./theme/m3";              // runtime M3 design tokens (CSS custom properties)
+@use "styles/mixins" as *;      // compile-time authoring helpers
+
+/* app-level layout primitives */
+/* base background fills the WHOLE window (incl. under the transparent status & nav bars on
+   Android edge-to-edge) so the app colour continues there instead of a system scrim. */
+html, body, #root { height: 100%; background: var(--md-background); }
+/* Blurred-art background: html keeps the solid base (fills the full window incl. under the system
+   bars); body/#root go transparent so the body-level .wp-appbg shows through everywhere — including
+   the strip under the floating tabs and the Android navigation bar. */
+:root[data-appbg="blur"] body, :root[data-appbg="blur"] #root { background: transparent; }
+/* On the player, the screen draws its own full-window blurred backdrop → everything above it must be
+   transparent (even with the app background OFF) so no dark base paints black behind the floating dock. */
+:root[data-tab="playing"] body, :root[data-tab="playing"] #root { background: transparent; }
+#root {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* thin M3 scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb {
+  background: var(--md-outline-variant);
+  border-radius: var(--md-shape-full);
+}
+::-webkit-scrollbar-track { background: transparent; }
+
+/* a reusable circular icon button with a state layer */
+.md-icon-btn {
+  @include flex-center;
+  @include state-layer;
+  width: 40px; height: 40px; border: none; border-radius: var(--md-shape-full);
+  background: transparent; color: var(--md-on-surface-variant);
+  transition: color var(--md-motion-standard);
+  svg { width: 24px; height: 24px; position: relative; }
+}

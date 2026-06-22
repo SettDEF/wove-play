@@ -1,0 +1,56 @@
+// Shared Sass authoring helpers for Wove.
+//
+// IMPORTANT: theming stays on runtime CSS custom properties (`--md-*` + `[data-theme]`), so live
+// light/dark/amoled switching keeps working — Sass passes those `var(...)` references through
+// untouched. These mixins/variables are only compile-time *authoring* sugar (breakpoints, repeated
+// declaration blocks); they never bake in a colour or a theme value.
+
+// ── Breakpoints (compile-time media-query constants) ──────────────────────────
+$bp-desktop: 760px;          // wide layout / hover affordances
+$bp-short-landscape: 560px;  // phone in landscape — collapse the player vertically
+
+// Wide PORTRAIT only → the left nav rail. A wide LANDSCAPE window uses the landscape layout instead.
+@mixin desktop { @media (min-width: $bp-desktop) and (orientation: portrait) { @content; } }
+@mixin coarse { @media (pointer: coarse) { @content; } }           // touch input
+// LANDSCAPE layout (centred dock + cover-left player): short landscape PHONES, OR any wide LANDSCAPE
+// desktop window — so the desktop UI switches portrait↔landscape live as you resize the window.
+@mixin short-landscape {
+  @media (orientation: landscape) and (max-height: $bp-short-landscape),
+         (orientation: landscape) and (min-width: $bp-desktop) { @content; }
+}
+@mixin reduced-motion { @media (prefers-reduced-motion: reduce) { @content; } }
+
+// ── Landscape floating docks ──────────────────────────────────────────────────
+// The bottom tabs AND the mini-player are floating "latte-dock" panels in landscape. They MUST match:
+// one shared height + corner radius + frosted surface, so changing the look here updates both at once.
+$dock-height: 46px;
+$dock-radius: var(--md-shape-full);
+@mixin dock-glass {
+  background: color-mix(in srgb, var(--md-surface-container-high) 68%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5); backdrop-filter: blur(22px) saturate(1.5);
+  border: 1px solid color-mix(in srgb, var(--md-outline-variant) 70%, transparent);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .32);
+}
+
+// ── Text ──────────────────────────────────────────────────────────────────────
+@mixin ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@mixin line-clamp($lines) {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: $lines; overflow: hidden;
+}
+
+// ── Layout ──────────────────────────────────────────────────────────────────────
+@mixin flex-center { display: flex; align-items: center; justify-content: center; }
+@mixin fill { position: absolute; inset: 0; }
+
+// ── Material state layer ─────────────────────────────────────────────────────────
+// The hover/press tint overlay used by buttons/rows. Uses the runtime state-opacity tokens, so it
+// follows the active theme.
+@mixin state-layer($radius: inherit) {
+  position: relative;
+  &::before {
+    content: ""; position: absolute; inset: 0; border-radius: $radius;
+    background: currentColor; opacity: 0; transition: opacity var(--md-motion-standard);
+  }
+  &:hover::before { opacity: var(--md-state-hover); }
+  &:active::before { opacity: var(--md-state-press); }
+}

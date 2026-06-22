@@ -1,0 +1,2915 @@
+@use "styles/mixins" as *;      // breakpoints, state-layer, ellipsis, … (theming stays runtime CSS vars)
+
+/* This is an APP, not a web page — UI text (titles, labels, buttons) shouldn't be selectable/drag-
+   highlightable. Inputs, textareas and opt-in `.wp-selectable` (e.g. lyrics) stay selectable so you can
+   still type + copy where it matters. Also kill the drag-ghost on images. */
+:root { -webkit-user-select: none; user-select: none; }
+input, textarea, select, [contenteditable]:not([contenteditable="false"]), .wp-selectable, .wp-selectable * {
+  -webkit-user-select: text; user-select: text;
+}
+img { -webkit-user-drag: none; }
+
+/* ── App shell ───────────────────────────────────────────────────────────── */
+.wp-app {
+  display: grid;
+  grid-template-rows: 1fr auto auto; /* content · mini-player · nav (header removed) */
+  grid-template-columns: 1fr;
+  height: 100vh;       /* fallback for older webviews */
+  height: 100dvh;      /* visible viewport — excludes Android system bars so the nav stays on-screen */
+  max-height: 100dvh;
+  overflow: hidden;
+  background: var(--md-background);
+}
+.wp-content { overflow: hidden; min-height: 0; position: relative; }
+/* content used to sit under a 56px top bar; without it, keep clear of the status-bar inset */
+.wp-content { padding-top: env(safe-area-inset-top); }
+.wp-screen { height: 100%; overflow-y: auto; padding: 4px 12px 12px; }
+/* Uniform screen-switch animation: a quick fade + tiny rise, same for every tab. Fast (150ms)
+   so it reads as "immediate". GPU-only (opacity/transform). Honors reduced-motion. */
+/* NOTE: no `will-change: transform` here — it would create a containing block that traps
+   position:fixed descendants (e.g. the library's floating FABs) inside the content area. */
+.wp-screen-anim { height: 100%; animation: wpScreenIn .15s ease both; }
+@keyframes wpScreenIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@include reduced-motion { .wp-screen-anim { animation: none; } }
+.wp-muted { color: var(--md-on-surface-variant); }
+
+/* ── Filled button / FAB ─────────────────────────────────────────────────── */
+.wp-filled-btn {
+  display: inline-flex; align-items: center; gap: 8px; justify-content: center;
+  height: 40px; padding: 0 24px; border: none; border-radius: var(--md-shape-full);
+  background: var(--md-primary); color: var(--md-on-primary);
+  font-size: 14px; font-weight: 600; letter-spacing: .1px;
+  transition: filter var(--md-motion-standard);
+}
+.wp-filled-btn:hover { filter: brightness(1.05); }
+.wp-filled-btn:disabled { background: var(--md-surface-container-highest); color: var(--md-on-surface-variant); opacity: .7; cursor: default; }
+
+/* ── Search ──────────────────────────────────────────────────────────────── */
+.wp-searchbar {
+  display: flex; align-items: center; gap: 8px;
+  height: 48px; padding: 0 8px 0 16px; margin: 4px 0 8px;
+  background: var(--md-surface-container-high); color: var(--md-on-surface-variant);
+  border-radius: var(--md-shape-full);
+}
+.wp-search-input {
+  flex: 1; background: none; border: none; outline: none; color: var(--md-on-surface);
+}
+.wp-search-input::placeholder { color: var(--md-on-surface-variant); }
+
+/* ── Track list ──────────────────────────────────────────────────────────── */
+.wp-list { display: flex; flex-direction: column; }
+.wp-list-head { padding: 6px 8px; }
+.wp-row {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 8px; border: none; background: none; text-align: left;
+  border-radius: var(--md-shape-md); color: var(--md-on-surface);
+  transition: background var(--md-motion-standard);
+}
+.wp-row:hover { background: var(--md-surface-container); }
+.wp-row-active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.wp-row-text { flex: 1; min-width: 0; }
+.wp-art {
+  display: grid; place-items: center; flex-shrink: 0;
+  width: 48px; height: 48px; border-radius: var(--md-shape-sm);
+  background: var(--md-surface-container-highest); color: var(--md-on-surface-variant);
+}
+.wp-art-sm { width: 40px; height: 40px; }
+
+.wp-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; height: 100%; text-align: center; padding: 24px;
+}
+.wp-scanbar { height: 3px; border-radius: 3px; background: var(--md-surface-container-high); overflow: hidden; margin: 4px 0; }
+.wp-scanbar-indet { height: 100%; width: 40%; background: var(--md-primary); border-radius: 3px; animation: wpIndet 1.1s ease-in-out infinite; }
+@keyframes wpIndet { 0% { margin-left: -40%; } 100% { margin-left: 100%; } }
+
+/* ── Mini player (Poweramp-style rounded pill, swipeable) ──────────────────── */
+/* clip the pill so a swipe (or anything) can never push it past the screen edges */
+/* docked onto the nav: same side margins (12px) + only a hair of gap, so the mini-player and the tab
+   bar read as one connected bottom control cluster. */
+.wp-mini-shell { position: relative; margin: 0 10px 4px; max-width: 100%; box-sizing: border-box; overflow: hidden; border-radius: 22px; animation: wpMiniIn .26s var(--md-motion-emphasized) both; }
+@keyframes wpMiniIn { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+.wp-mini {
+  position: relative; display: flex; align-items: center; gap: 4px; max-width: 100%; box-sizing: border-box;
+  padding: 7px 10px 7px 7px; touch-action: pan-y; cursor: pointer; user-select: none; overflow: hidden;
+  border-radius: 22px; border: 1px solid color-mix(in srgb, var(--md-primary) 20%, transparent);
+  background: color-mix(in srgb, var(--md-surface-container-high) 46%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6);
+  box-shadow: 0 8px 26px rgba(0,0,0,.34), 0 2px 10px color-mix(in srgb, var(--md-primary) 26%, transparent),
+              inset 0 1px 0 rgba(255,255,255,.07);
+  transition: transform .22s var(--md-motion-emphasized);
+}
+/* the blurred album art that tints the bar with the track's colours */
+.wp-mini-art {
+  position: absolute; inset: -40%; z-index: 0; background-size: cover; background-position: center;
+  filter: blur(34px) saturate(1.7); opacity: .5; transform: scale(1.2);
+}
+.wp-mini-scrim { position: absolute; inset: 0; z-index: 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--md-surface) 16%, transparent), color-mix(in srgb, var(--md-surface) 26%, transparent)); }
+.wp-mini > .wp-mini-main, .wp-mini > .wp-mini-btn, .wp-mini > .wp-cover { position: relative; z-index: 1; }
+.wp-mini > .wp-cover { margin-right: 7px; }
+/* timeline lives in the text column → spans right-of-cover to left-of-play, at the bottom of the bar.
+   .wp-mini-prog-hit is a taller transparent grab area (drag to seek); .wp-mini-prog is the visible track. */
+.wp-mini-prog-hit { position: relative; width: 100%; margin-top: 2px; padding: 5px 0; z-index: 1; cursor: pointer; touch-action: none; }
+.wp-mini-prog-wavy { position: relative; width: 100%; margin-top: -1px; z-index: 1; cursor: pointer; touch-action: none; }
+.wp-mini-prog { position: relative; width: 100%; height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--md-on-surface) 16%, transparent); overflow: hidden; }
+/* Compositor-only progress: scaleX (own layer) instead of animating `width`. Animating width is
+   layout+paint every frame, which forces the frosted nav / blurred bg / any open popup to RE-BLUR at
+   60fps during playback (the "everything lags while a track plays" bug). transform doesn't repaint. */
+.wp-mini-prog-fill { height: 100%; width: 100%; transform-origin: left center; transform: scaleX(0); background: var(--md-primary); box-shadow: 0 0 7px color-mix(in srgb, var(--md-primary) 75%, transparent); transition: transform .2s linear; will-change: transform; }
+.wp-mini-main { display: flex; flex-direction: column; justify-content: center; gap: 2px; flex: 1; min-width: 0; border: none; background: none; text-align: left; padding: 0; pointer-events: none; }
+.wp-mini-main .wp-cover { border-radius: 12px; box-shadow: 0 3px 10px rgba(0,0,0,.4); }
+.wp-mini-main .md-title-s { font-weight: 700; }
+.wp-mini-btn { flex-shrink: 0; }
+/* the play/pause button is a filled primary disc — the bar's focal point */
+.wp-mini .wp-mini-play { background: var(--md-primary); color: var(--md-on-primary); box-shadow: 0 3px 12px color-mix(in srgb, var(--md-primary) 50%, transparent); }
+.wp-mini .wp-mini-play:active { transform: scale(.9); }
+/* swipe affordance revealed behind the pill */
+.wp-mini-hint {
+  position: absolute; top: 50%; transform: translateY(-50%); display: grid; place-items: center;
+  width: 34px; height: 34px; border-radius: var(--md-shape-full);
+  background: var(--md-primary); color: var(--md-on-primary); box-shadow: var(--md-elev-1);
+}
+.wp-mini-hint-prev { left: 2px; }
+.wp-mini-hint-next { right: 2px; }
+
+/* ── Now Playing ─────────────────────────────────────────────────────────── */
+/* The player is a fixed full-screen layout — never scroll it (overrides .wp-screen's overflow-y:auto,
+   which otherwise let a 1px child overflow turn BOTH axes scrollable). */
+.wp-np { display: flex; flex-direction: column; gap: 14px; overflow: hidden; min-height: 0; }
+.wp-np-stage {
+  /* The cover/stage is ALWAYS square (1:1) — width-bound but capped so it never eats the whole column on a
+     tall window; centred, with the controls below. (Landscape overrides this to a height-bound square.) */
+  position: relative; flex: 0 1 auto; aspect-ratio: 1 / 1;
+  width: 100%; max-width: min(100%, 60vh); height: auto; margin: 0 auto; min-height: 0;
+  border-radius: var(--md-shape-xl); overflow: hidden;
+  background: linear-gradient(160deg, var(--md-surface-container-high), var(--md-surface-container-low));
+  display: grid; place-items: stretch; cursor: pointer; touch-action: pan-y;
+}
+.wp-np-cover { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Vinyl cover style (Customize player → Artwork shape → Vinyl): a spinnable, scratchable record. */
+.wp-vinyl-wrap { position: relative; width: 100%; height: 100%; display: grid; place-items: center; touch-action: none; cursor: grab; }
+.wp-vinyl-wrap:active { cursor: grabbing; }
+.wp-vinyl {
+  position: relative; width: 100%; height: 100%; max-width: 100%; aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, #17171b 0 28%, #0b0b0d 28% 100%);
+  box-shadow: 0 14px 44px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.05);
+  will-change: transform;
+}
+/* concentric grooves */
+.wp-vinyl-grooves {
+  position: absolute; inset: 0; border-radius: 50%; pointer-events: none; opacity: .55;
+  background: repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.06) 0 1px, rgba(0,0,0,0) 1px 4px);
+}
+/* the album art on the centre label */
+.wp-vinyl-label {
+  position: absolute; top: 50%; left: 50%; width: 42%; height: 42%; transform: translate(-50%, -50%);
+  border-radius: 50%; overflow: hidden; display: grid; place-items: center;
+  background: var(--md-surface-container-high);
+  box-shadow: 0 0 0 3px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.14);
+}
+.wp-vinyl-label img { width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; user-select: none; }
+.wp-vinyl-hole {
+  position: absolute; top: 50%; left: 50%; width: 4%; height: 4%; transform: translate(-50%, -50%);
+  border-radius: 50%; background: var(--md-background); box-shadow: inset 0 0 0 1px rgba(0,0,0,.6); z-index: 2;
+}
+/* a fixed light sheen across the spinning disc (stays put → reads like a reflection) */
+.wp-vinyl-sheen {
+  position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  background: linear-gradient(125deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,0) 28%, rgba(255,255,255,0) 72%, rgba(255,255,255,.08) 100%);
+}
+/* Player customization (NpCustomize): spin the artwork like a vinyl while playing + an ambient glow.
+   Spin reads best with the circle artwork shape. Both honour animations-off / reduced-motion. */
+.wp-np-spinart .wp-np-cover { animation: wpVinyl 8s linear infinite; transform-origin: 50% 50%; }
+:root[data-anim="off"] .wp-np-spinart .wp-np-cover { animation: none; }
+.wp-np-glow { box-shadow: 0 0 72px 4px color-mix(in srgb, var(--md-primary) 45%, transparent); }
+@include reduced-motion { .wp-np-spinart .wp-np-cover { animation: none; } }
+/* Cross-dissolve cover (CrossArt): stacked layers, the new one fades in over the old (compositor
+   opacity → cheap). The wrapper carries the layout; the <img> layers fill + crop inside it. */
+.wp-crossart { position: relative; overflow: hidden; }
+.wp-crossart > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.wp-crossart-in { animation: wpArtIn linear forwards; will-change: opacity; }
+@keyframes wpArtIn { from { opacity: 0; } to { opacity: 1; } }
+/* No-cover player view: a rich generative "cover" — the Sound-DNA glyph centered on a tint derived
+   from the track's own hue, instead of a small icon on flat grey. */
+.wp-np-cover-empty {
+  display: grid; place-items: center; position: relative; overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 18%, hsl(var(--dna-h, 210) 55% 42% / .9), transparent 70%),
+    radial-gradient(120% 100% at 80% 100%, hsl(calc(var(--dna-h, 210) + 40) 50% 32% / .7), transparent 75%),
+    linear-gradient(160deg, var(--md-surface-container-high), var(--md-surface-container-low));
+}
+.wp-np-cover-empty .wp-dna { width: 82% !important; height: 82% !important; opacity: .92; filter: drop-shadow(0 6px 24px rgba(0,0,0,.28)); }
+.wp-np-dots { display: flex; gap: 8px; justify-content: center; align-items: center; padding: 2px 0; }
+.wp-np-dot {
+  width: 7px; height: 7px; border-radius: 50%; padding: 0; border: none; cursor: pointer;
+  background: var(--md-outline); opacity: .5; transition: width .18s var(--md-motion-emphasized), opacity .18s ease, background .18s ease;
+}
+.wp-np-dot.on { width: 20px; border-radius: 4px; opacity: 1; background: var(--md-primary); }
+/* Controls wrapper: in PORTRAIT it's layout-invisible (children flow in the player column exactly as
+   before); in LANDSCAPE it becomes the centred right-hand controls column (see short-landscape).
+   With display:contents the wrapper has no box, so the `.wp-np > *` z-index rule no longer lifts these
+   children above the blurred backdrop — re-apply it to the wrapped children directly (else the title +
+   queue/footer render BEHIND the backdrop and disappear). */
+.wp-np-controls { display: contents; }
+.wp-np-controls > * { position: relative; z-index: 1; }
+.wp-np-meta { display: flex; align-items: center; gap: 8px; }
+.wp-np-meta-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.wp-np-footer { display: flex; justify-content: center; }
+/* Poweramp-style cycling status line: tap to cycle info, hold for the Audio Info pipeline panel. */
+.wp-np-info {
+  display: flex; align-items: center; justify-content: center; gap: 6px; max-width: 100%;
+  margin: 2px auto 0; padding: 4px 12px; border: none; background: none; cursor: pointer;
+  color: var(--md-on-surface-variant); font-size: 11px; font-weight: 600; letter-spacing: .3px;
+  text-transform: uppercase; touch-action: none;
+}
+.wp-np-info .ellipsis { min-width: 0; }
+.wp-np-info:active { opacity: .6; }
+.wp-text-btn {
+  display: inline-flex; align-items: center; gap: 6px; border: none; cursor: pointer;
+  background: var(--md-surface-container-high); color: var(--md-on-surface);
+  padding: 8px 16px; border-radius: var(--md-shape-full);
+}
+.wp-text-btn:hover { background: var(--md-surface-container-highest); }
+.wp-np-seek { display: flex; flex-direction: column; gap: 2px; }
+/* RESERVE the bar + section-strip heights so the waveform/sections refine IN PLACE (no shimmer, no
+   layout jump): a pseudo-waveform shows instantly, then the precise waveform + sections morph in. */
+.wp-np-seek-bar { position: relative; min-height: 58px; display: flex; align-items: center; }
+/* "1×" zoom-out chip shown while the timeline is zoomed in (double-tap the waveform to zoom). */
+.wp-seek-zoomout {
+  position: absolute; top: 3px; right: 3px; z-index: 3; border: none; cursor: pointer;
+  border-radius: 999px; padding: 2px 9px; font-weight: 700; line-height: 1.4;
+  background: color-mix(in srgb, var(--md-surface-container-highest) 82%, transparent); color: var(--md-on-surface);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.wp-np-seek-bar > * { width: 100%; }
+.wp-np-strip { min-height: 25px; }  /* == rendered .wp-secstrip (20px + 5px margin) → no jump when sections load */
+/* the precise waveform eases in over the placeholder when analysis sharpens */
+.wp-np-seek-bar .wp-songseek { animation: wpSeekIn .4s cubic-bezier(.16, 1, .3, 1); }
+@keyframes wpSeekIn { from { opacity: 0; } to { opacity: 1; } }
+:root[data-anim="off"] .wp-np-seek-bar .wp-songseek { animation: none; }
+.wp-np-times { display: flex; justify-content: space-between; }
+/* tappable song-structure map under the seekbar — one segment per section, width = its share */
+.wp-secstrip { display: flex; gap: 3px; margin-top: 5px; height: 20px; }
+/* Loading: while analysis is still computing the strip shows the provisional/live map — render it as a
+   CALM, label-less, neutral skeleton with a gentle breathe so it never looks jumpy or mis-coloured. The
+   real tiered, labelled sections fade in (wp-secstrip-anim) the moment the precise pass lands. */
+.wp-secstrip-loading .wp-secseg { background: color-mix(in srgb, var(--md-on-surface) 10%, transparent) !important; color: transparent; cursor: default; }
+.wp-secstrip-loading { animation: wpStripBreathe 1.6s ease-in-out infinite; }
+@keyframes wpStripBreathe { 0%, 100% { opacity: .5; } 50% { opacity: .82; } }
+:root[data-anim="off"] .wp-secstrip-loading { animation: none; opacity: .6; }
+.wp-secseg {
+  flex: 1 1 0; min-width: 0; border: none; border-radius: 5px; cursor: pointer; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; padding: 0 4px;
+  background: hsl(var(--seg-h) 38% 52% / .26); color: var(--md-on-surface-variant);
+  transition: background .18s, color .18s, opacity .18s, flex-grow .32s var(--md-motion-emphasized);
+  opacity: .72;
+}
+.wp-secseg:hover { opacity: 1; }
+.wp-secseg-t0 { --seg-h: 215; } // Break — cool blue
+.wp-secseg-t1 { --seg-h: 265; } // Verse — violet
+.wp-secseg-t2 { --seg-h: 145; } // Drop — green (primary-ish energy)
+.wp-secseg-on { opacity: 1; background: hsl(var(--seg-h) 60% 52% / .9); color: #fff; }
+.wp-secseg-label { font-size: 10px; font-weight: 600; letter-spacing: .2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Fisheye: the focused section (playhead, or one you tap) widens and reveals clickable subsections. It
+   reads as one tinted block holding evenly-spaced ticks; only the playing tick lights up + shows its label. */
+.wp-secseg-focus { opacity: 1; padding: 2px; background: hsl(var(--seg-h) 40% 50% / .2); }
+.wp-secsubs { display: flex; gap: 2px; width: 100%; height: 100%; }
+.wp-secsub {
+  flex: 1 1 0; min-width: 3px; border-radius: 3px; cursor: pointer; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; padding: 0 2px;
+  /* tier colour (--seg-h from .wp-secseg-t*), so a Drop subsection reads green, a Break blue, etc. */
+  background: hsl(var(--seg-h, 265) 45% 52% / .42); transition: background .15s, flex-grow .2s ease;
+}
+.wp-secsub:hover { background: hsl(var(--seg-h, 265) 55% 55% / .72); }
+/* The playing subsection grows to give its label room + lights up — the focal point of the fisheye. */
+.wp-secsub-on { background: hsl(var(--seg-h, 265) 66% 56% / .96); flex-grow: 2.6 !important; box-shadow: 0 0 0 1px hsl(var(--seg-h, 265) 70% 70% / .5) inset; }
+.wp-secsub-label { font-size: 9.5px; font-weight: 700; letter-spacing: .2px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Smooth section loading (Settings → Player): each segment fades + grows in, staggered by its index
+   (--i), so the strip cascades into place as analysis refines instead of popping. `backwards` holds the
+   hidden start during the per-segment delay; no forwards fill, so active/hover opacity still apply after.
+   Honours animations-off / reduced-motion. */
+@keyframes wpSegIn { from { opacity: 0; transform: translateY(3px) scaleY(.6); } to { opacity: .72; transform: none; } }
+.wp-secstrip-anim .wp-secseg { animation: wpSegIn .34s var(--md-motion-emphasized) backwards; animation-delay: calc(var(--i, 0) * 32ms); }
+:root[data-anim="off"] .wp-secstrip-anim .wp-secseg { animation: none; }
+@include reduced-motion { .wp-secstrip-anim .wp-secseg { animation: none; } }
+.wp-np-transport { display: flex; align-items: center; justify-content: center; gap: 8px; padding-bottom: 8px; }
+.wp-big { width: 56px; height: 56px; color: var(--md-on-surface); }
+.wp-on { color: var(--md-primary); }
+.wp-fab {
+  display: grid; place-items: center; width: 72px; height: 72px;
+  border: none; border-radius: var(--md-shape-xl);
+  background: var(--md-primary); color: var(--md-on-primary);
+  box-shadow: var(--md-elev-2); transition: filter var(--md-motion-standard);
+}
+.wp-fab:hover { filter: brightness(1.05); }
+.wp-fab { position: relative; }
+/* Hold-to-restart: the FAB dips and a ring sweeps over the 0.5s hold. */
+.wp-fab-holding { transform: scale(.94); }
+.wp-fab-ring { position: absolute; inset: -4px; width: calc(100% + 8px); height: calc(100% + 8px); transform: rotate(-90deg); pointer-events: none; }
+.wp-fab-ring circle {
+  fill: none; stroke: var(--md-on-primary); stroke-width: 3; stroke-linecap: round; opacity: .9;
+  stroke-dasharray: 125.6; stroke-dashoffset: 125.6; animation: wpFabSweep .5s linear forwards;
+}
+@keyframes wpFabSweep { to { stroke-dashoffset: 0; } }
+
+/* Swipe-back peek: TRANSPARENT so the real app backdrop (blurred album art, already behind everything)
+   shows through as the screen slides away — instead of a flat surface panel that read as a black void.
+   Just a soft shadow on its right edge for depth. Inserted/removed by EdgeBack at runtime. */
+.wp-edgeback-peek {
+  position: fixed; left: 0; top: 0; width: 100vw; height: 100vh;
+  background: transparent; pointer-events: none;
+}
+
+/* ── Customizable player: accent source, control styles, compact spacing ─────────────────────────── */
+/* Accent "from art": --np-accent is set inline on .wp-np; retint the FAB, active controls and glow. */
+.wp-np-acc-art .wp-fab { background: var(--np-accent, var(--md-primary)); }
+.wp-np-acc-art .wp-on { color: var(--np-accent, var(--md-primary)); }
+.wp-np-acc-art .wp-np-glow { box-shadow: 0 0 72px 4px color-mix(in srgb, var(--np-accent, var(--md-primary)) 46%, transparent); }
+
+/* Pill controls: side transport buttons get a soft container; the FAB stays the hero. */
+.wp-np-ctrl-pill .wp-np-transport .md-icon-btn {
+  background: var(--md-surface-container-high); border-radius: 16px; width: 52px; height: 44px;
+}
+/* Minimal controls: strip the FAB fill so the whole row reads as flat glyphs. */
+.wp-np-ctrl-minimal .wp-fab {
+  background: transparent; color: var(--np-accent, var(--md-primary)); box-shadow: none;
+}
+.wp-np-ctrl-minimal .wp-fab-ring circle { stroke: var(--np-accent, var(--md-primary)); }
+.wp-np-ctrl-minimal .wp-np-transport { gap: 12px; }
+
+/* Compact: tighter vertical rhythm so everything fits on short screens. */
+.wp-np-compact .wp-np-meta { margin-top: 2px; }
+.wp-np-compact .wp-np-meta-text { gap: 0; }
+.wp-np-compact .wp-np-transport { padding-bottom: 2px; gap: 6px; }
+.wp-np-compact .wp-np-seek { margin: 2px 0; }
+.wp-np-compact .wp-np-footer { padding: 2px 0; }
+.wp-np-compact .wp-stars { margin-top: 1px; }
+
+/* Floating Play/Shuffle for the current (filtered+sorted) song list — no row, sits above the mini-player+nav. */
+.wp-list-fab {
+  position: fixed; right: max(14px, calc(env(safe-area-inset-right) + 8px)); z-index: 30;
+  /* just above the nav bar; drops lower when no mini-player is showing so it never floats mid-screen */
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; gap: 10px;
+  pointer-events: none;
+}
+:root[data-mini="1"] .wp-list-fab { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+.wp-list-fab > * { pointer-events: auto; }
+.wp-lfab {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 50px; padding: 0 18px; border: none; border-radius: 26px;
+  font: inherit; font-weight: 600; cursor: pointer;
+  box-shadow: var(--md-elev-2); transition: filter var(--md-motion-standard), transform var(--md-motion-standard);
+}
+.wp-lfab:active { transform: scale(0.94); }
+.wp-lfab-ghost {
+  width: 50px; padding: 0; justify-content: center;
+  background: var(--md-surface-3, var(--md-surface)); color: var(--md-on-surface);
+}
+.wp-lfab-accent { background: var(--md-primary); color: var(--md-on-primary); }
+.wp-lfab:hover { filter: brightness(1.06); }
+
+/* ── Slider ──────────────────────────────────────────────────────────────── */
+.wp-slider { position: relative; display: flex; align-items: center; cursor: pointer; touch-action: none; }
+.wp-slider-track { position: relative; width: 100%; background: var(--md-surface-container-highest); border-radius: var(--md-shape-full); overflow: hidden; }
+.wp-slider-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--md-primary); border-radius: inherit; }
+.wp-slider-thumb { position: absolute; width: 14px; height: 14px; border-radius: var(--md-shape-full); background: var(--md-primary); transform: translateX(-50%); box-shadow: var(--md-elev-1); }
+
+/* ── Visualizer ──────────────────────────────────────────────────────────── */
+.wp-viz { width: 100%; height: 100%; }
+.wp-viz canvas { display: block; width: 100%; height: 100%; }
+.wp-viz-full { display: flex; flex-direction: column; gap: 12px; }
+.wp-viz-full .wp-viz { background: var(--md-surface-container-low); border-radius: var(--md-shape-lg); min-height: 0; }
+.wp-viz-full .wp-viz:first-child { flex: 2; }
+.wp-viz-full .wp-viz:last-child { flex: 1; }
+
+/* ── Equalizer ───────────────────────────────────────────────────────────── */
+.wp-eq { display: flex; flex-direction: column; gap: 14px; }
+.wp-eq-head { display: flex; align-items: center; justify-content: space-between; }
+.wp-switch {
+  position: relative; width: 52px; height: 32px; border-radius: var(--md-shape-full);
+  border: 2px solid var(--md-outline); background: var(--md-surface-container-highest);
+  transition: background var(--md-motion-standard), border-color var(--md-motion-standard);
+}
+.wp-switch-on { background: var(--md-primary); border-color: var(--md-primary); }
+.wp-switch-knob {
+  position: absolute; top: 50%; left: 6px; transform: translateY(-50%);
+  display: grid; place-items: center; width: 16px; height: 16px; border-radius: var(--md-shape-full);
+  background: var(--md-outline); color: var(--md-surface-container-highest);
+  transition: left var(--md-motion-standard), width var(--md-motion-standard), height var(--md-motion-standard), background var(--md-motion-standard);
+}
+.wp-switch-on .wp-switch-knob { left: 26px; width: 22px; height: 22px; background: var(--md-on-primary); color: var(--md-primary); }
+
+.wp-preset-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.wp-preset-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.wp-preset-bar .wp-chip { display: inline-flex; align-items: center; gap: 5px; }
+.wp-chip {
+  height: 32px; padding: 0 14px; border-radius: var(--md-shape-sm);
+  border: 1px solid var(--md-outline-variant); background: transparent; color: var(--md-on-surface-variant);
+  font-size: 13px; font-weight: 500;
+}
+.wp-chip-on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); border-color: transparent; }
+.wp-chip-lead { display: inline-flex; align-items: center; gap: 5px; background: var(--md-surface-container-high); border-color: transparent; color: var(--md-on-surface); }
+.wp-chip-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--md-primary); color: var(--md-on-primary); font-size: 11px; font-weight: 700; }
+.wp-feed-sentinel { height: 24px; }
+
+/* ── EQ preset browser (Poweramp-style) ─────────────────────────────────── */
+.wp-eqthumb { display: block; color: var(--md-on-surface-variant); }
+.wp-pb-search { display: flex; align-items: center; gap: 8px; padding: 2px 6px 10px; }
+.wp-pb-input { flex: 1; min-width: 0; border: none; background: var(--md-surface-container-high); color: var(--md-on-surface); height: 40px; border-radius: var(--md-shape-full); padding: 0 14px; outline: none; }
+.wp-pb-chips { display: flex; gap: 8px; padding: 0 6px 8px; overflow-x: auto; scrollbar-width: none; }
+.wp-pb-chips::-webkit-scrollbar { display: none; }
+.wp-pb-chips .wp-chip { flex: 0 0 auto; }
+.wp-pb-list { overflow-y: auto; flex: 1; min-height: 0; padding-bottom: 8px; }
+.wp-pb-empty { padding: 28px 12px; text-align: center; }
+.wp-pb-item { display: flex; align-items: center; border-radius: 14px; }
+.wp-pb-item.wp-pb-on { background: color-mix(in srgb, var(--md-primary) 10%, transparent); }
+.wp-pb-pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 9px 10px; background: none; border: none; color: inherit; text-align: left; cursor: pointer; }
+.wp-pb-thumb { flex-shrink: 0; width: 72px; height: 34px; border-radius: 8px; overflow: hidden; background: var(--md-surface-container-high); display: grid; place-items: center; }
+.wp-pb-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wp-pb-del { flex-shrink: 0; color: var(--md-on-surface-variant); }
+
+/* ── Save-preset dialog ─────────────────────────────────────────────────── */
+.wp-saveeq { align-items: stretch; text-align: left; gap: 14px; }
+.wp-saveeq .wp-text-input { width: 100%; }
+.wp-saveeq-pin { display: flex; align-items: center; gap: 12px; background: none; border: none; color: inherit; text-align: left; cursor: pointer; padding: 0; }
+.wp-saveeq-box { flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--md-outline); display: grid; place-items: center; }
+.wp-saveeq-box-on { background: var(--md-primary); border-color: var(--md-primary); }
+
+/* ── EQ live visualisation container (curve + mirrored bars + colour) ──────────── */
+.wp-eq-viz {
+  position: relative; border-radius: var(--md-shape-lg); overflow: hidden;
+  background: radial-gradient(120% 140% at 50% 0%, color-mix(in srgb, var(--eq-accent) 12%, var(--md-surface-container)) 0%, var(--md-surface-container) 70%);
+  border: 1px solid var(--md-outline-variant); padding: 4px 4px 0;
+}
+.wp-eqcurve { position: relative; width: 100%; height: 132px; cursor: pointer; touch-action: none; }
+.wp-eqcurve canvas { display: block; width: 100%; height: 100%; }
+.wp-eq-viz-tools { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 4px; }
+.wp-eq-swatch {
+  position: relative; width: 26px; height: 26px; border-radius: var(--md-shape-full);
+  border: 2px solid rgba(255,255,255,0.6); box-shadow: var(--md-elev-1); cursor: pointer; overflow: hidden;
+}
+.wp-eq-swatch input { position: absolute; inset: -6px; width: 200%; height: 200%; opacity: 0; cursor: pointer; border: none; padding: 0; }
+.wp-eq-swatch-reset { width: 26px; height: 26px; background: rgba(0,0,0,0.35); border-radius: var(--md-shape-full); }
+/* mirrored rounded-rectangle bar row */
+.wp-eq-mirror { display: flex; align-items: stretch; gap: 4px; height: 46px; padding: 4px 6px 6px; }
+.wp-eq-mcol { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; cursor: pointer; }
+.wp-eq-mbar {
+  width: 70%; max-width: 16px; min-height: 6px; border-radius: var(--md-shape-full);
+  background: var(--eq-accent); opacity: .9; transition: height .12s var(--md-motion-standard);
+}
+.wp-eq-mbar-cut { opacity: .42; }
+.wp-eq-mcol-sel .wp-eq-mbar { outline: 2px solid #fff; outline-offset: 1px; opacity: 1; }
+
+/* themed horizontal slider (used across the EQ tab — replaces the native range input) */
+.wp-slider { position: relative; flex: 1; min-width: 0; height: 30px; display: flex; align-items: center; cursor: pointer; touch-action: none; }
+.wp-slider-track { position: relative; width: 100%; height: 8px; border-radius: var(--md-shape-full); background: var(--md-surface-container-highest); overflow: hidden; }
+.wp-slider-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--md-shape-full); background: var(--sl-accent, var(--md-primary)); }
+.wp-slider-thumb {
+  position: absolute; top: 50%; width: 20px; height: 20px; border-radius: var(--md-shape-full);
+  background: var(--sl-accent, var(--md-primary)); border: 3px solid var(--md-surface); box-shadow: var(--md-elev-2);
+  transform: translate(-50%, -50%); pointer-events: none;
+}
+.wp-set-slider { width: 150px; display: flex; }
+
+/* selected-band editor (Advanced): frequency / width(Q) / gain */
+.wp-eq-bandedit {
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 14px 14px;
+  background: var(--md-surface-container); border-radius: var(--md-shape-lg); border: 1px solid var(--md-outline-variant);
+}
+.wp-eq-bandedit-head { display: flex; align-items: center; gap: 4px; padding-bottom: 4px; }
+.wp-eq-band-title { flex: 1; text-align: center; }
+.wp-eq-band-title .md-title-s { color: var(--md-primary); }
+/* a parameter row: label · slider · value pill */
+.wp-eq-param { display: flex; align-items: center; gap: 12px; min-height: 40px; }
+.wp-eq-plabel { min-width: 74px; color: var(--md-on-surface); }
+.wp-eq-pval {
+  min-width: 60px; text-align: center; padding: 3px 8px; border-radius: var(--md-shape-full);
+  background: var(--md-surface-container-highest); color: var(--md-on-surface);
+  font-variant-numeric: tabular-nums; font-weight: 600;
+}
+.wp-eq-preamp { padding-top: 2px; }
+/* clearer selected band in the fader strip */
+.wp-band-sel .wp-band-freq { color: var(--md-primary); font-weight: 700; }
+.wp-band-sel .wp-band-track { box-shadow: 0 0 0 2px color-mix(in srgb, var(--md-primary) 60%, transparent); }
+
+.wp-bands { display: flex; justify-content: space-between; gap: 4px; height: 220px; padding: 4px 0; transition: opacity var(--md-motion-standard); }
+.wp-dim { opacity: .4; }
+.wp-band { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.wp-band-val { color: var(--md-on-surface-variant); font-variant-numeric: tabular-nums; }
+.wp-band-track { position: relative; flex: 1; width: 8px; border-radius: var(--md-shape-full); background: var(--md-surface-container-highest); cursor: ns-resize; touch-action: none; }
+.wp-band-fill { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(0deg, var(--md-tertiary), var(--md-primary)); border-radius: var(--md-shape-full); }
+.wp-band-thumb { position: absolute; left: 50%; width: 18px; height: 14px; border-radius: var(--md-shape-xs); background: var(--md-primary); transform: translateX(-50%); box-shadow: var(--md-elev-1); }
+.wp-band-freq { font-variant-numeric: tabular-nums; }
+.wp-band-sub { font-size: 11px; }
+
+/* Simple mode: three big thumb-friendly macro faders */
+.wp-bands-simple { height: 300px; gap: 20px; padding: 8px 12px; justify-content: space-around; }
+.wp-band-big { gap: 8px; }
+.wp-band-big .wp-band-track { width: 16px; }
+.wp-band-big .wp-band-thumb { width: 30px; height: 22px; border-radius: var(--md-shape-sm); }
+.wp-band-big .wp-band-freq { font-size: 15px; font-weight: 600; color: var(--md-on-surface); }
+.wp-band-big .wp-band-val { font-size: 14px; }
+
+.wp-preamp { display: flex; align-items: center; gap: 12px; }
+.wp-range { flex: 1; accent-color: var(--md-primary); height: 4px; }
+
+/* ── DAW link ────────────────────────────────────────────────────────────── */
+.wp-daw { display: flex; flex-direction: column; gap: 18px; }
+.wp-daw-hero {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;
+  padding: 24px; background: var(--md-surface-container-low); border-radius: var(--md-shape-xl);
+}
+.wp-daw-logo { display: grid; place-items: center; width: 72px; height: 72px; border-radius: var(--md-shape-lg); background: var(--md-primary); }
+.wp-daw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.wp-daw-card { display: flex; flex-direction: column; gap: 6px; padding: 16px; background: var(--md-surface-container); border-radius: var(--md-shape-lg); }
+
+/* ── Visualizer studio ───────────────────────────────────────────────────── */
+.wp-studio { display: flex; flex-direction: column; gap: 12px; }
+.wp-studio-preview {
+  position: relative; height: 220px; flex-shrink: 0;
+  border-radius: var(--md-shape-lg); overflow: hidden;
+  background: var(--md-surface-container-lowest);
+}
+.wp-rec-dot {
+  position: absolute; top: 10px; right: 10px; width: 12px; height: 12px; border-radius: var(--md-shape-full);
+  background: var(--md-error); box-shadow: 0 0 0 0 var(--md-error); animation: wpPulse 1.2s ease-out infinite;
+}
+@keyframes wpPulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--md-error) 70%, transparent); } 100% { box-shadow: 0 0 0 10px transparent; } }
+
+/* segmented buttons */
+.wp-seg { display: flex; background: var(--md-surface-container); border-radius: var(--md-shape-full); padding: 3px; gap: 4px; flex-wrap: wrap; }
+.wp-seg-item {
+  flex: 1 1 0; min-width: 56px; height: 32px; border: none; border-radius: var(--md-shape-full); background: transparent;
+  color: var(--md-on-surface-variant); font-size: 13px; font-weight: 500; white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; text-align: center;
+}
+.wp-seg-on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.wp-seg-sm { flex: 1; }
+/* equal-width cells with breathing room so the active pill never touches the next label */
+.wp-seg-sm .wp-seg-item { flex: 1 1 0; min-width: 0; padding: 0 12px; }
+
+/* slider control rows */
+.wp-ctl-group { display: flex; flex-direction: column; gap: 10px; }
+.wp-ctl { display: grid; grid-template-columns: 92px 1fr 44px; align-items: center; gap: 10px; }
+.wp-ctl-label { color: var(--md-on-surface); }
+.wp-ctl-val { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* toggles */
+.wp-toggle-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.wp-toggle {
+  display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px;
+  border-radius: var(--md-shape-sm); border: 1px solid var(--md-outline-variant);
+  background: transparent; color: var(--md-on-surface-variant);
+}
+.wp-toggle-on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); border-color: transparent; }
+.wp-toggle-dot { width: 10px; height: 10px; border-radius: var(--md-shape-full); border: 2px solid currentColor; }
+.wp-toggle-on .wp-toggle-dot { background: currentColor; }
+
+/* colours */
+.wp-color-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.wp-color { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.wp-color input[type="color"] {
+  width: 44px; height: 44px; padding: 0; border: 2px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md); background: none; cursor: pointer;
+}
+
+/* export panel */
+.wp-export { display: flex; flex-direction: column; gap: 10px; padding: 14px; background: var(--md-surface-container-low); border-radius: var(--md-shape-lg); }
+.wp-export-head { display: flex; align-items: center; gap: 8px; }
+.wp-export-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.wp-export-row .wp-seg { flex: 1; min-width: 160px; }
+.wp-rec { background: var(--md-error); color: var(--md-on-error); }
+
+/* ── Navigation bar (bottom) ─────────────────────────────────────────────── */
+/* floating rounded tab bar (detached pill, not edge-to-edge) */
+.wp-nav {
+  position: relative; overflow: hidden;
+  display: flex; align-items: stretch; justify-content: space-around;
+  height: 62px; box-sizing: border-box; flex-shrink: 0;
+  margin: 0 12px calc(6px + env(safe-area-inset-bottom));
+  padding: 4px 6px;
+  /* Frosted glass: the nav carries its OWN blurred current-cover tint (.wp-nav-art) + a scrim, so it
+     always shows the album art — never a flat white block — regardless of the app-background setting.
+     The base is transparent; backdrop-filter additionally blurs whatever sits behind the bar. */
+  background: transparent;
+  -webkit-backdrop-filter: blur(34px) saturate(1.8); backdrop-filter: blur(34px) saturate(1.8);
+  border: 1.5px solid color-mix(in srgb, var(--md-outline-variant) 85%, transparent);
+  border-radius: 26px;   /* softly rounded "latte dock" — not a fat full-stadium */
+  box-shadow: 0 4px 14px rgba(0,0,0,.18);   /* lighter — the heavy shadow read as a dark halo behind the dock */
+}
+/* multi-artist names → clickable links (split on , & feat. ft. x vs. …). Inline, inherits the row's font. */
+.wp-artlink {
+  background: none; border: none; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer;
+}
+.wp-artlink:hover { color: var(--md-on-surface); text-decoration: underline; text-underline-offset: 2px; }
+
+/* Clickable file-path breadcrumb (Audio Info → Folder): each folder segment opens that folder. */
+.wp-ai-path-row { display: flex; flex-direction: column; gap: 3px; padding: 4px 0; }
+.wp-ai-path { color: var(--md-on-surface-variant); line-height: 1.5; word-break: break-word; }
+.wp-pathcrumb { background: none; border: none; padding: 0; margin: 0; font: inherit; color: var(--md-primary); cursor: pointer; }
+.wp-pathcrumb:hover { text-decoration: underline; text-underline-offset: 2px; }
+.wp-pathsep { color: var(--md-outline); margin: 0 1px; }
+.wp-pathfile { color: var(--md-on-surface); }
+/* No album-art tint + no dim overlay behind the tabs — the dock is just CLEAN frosted glass (the
+   backdrop-filter blur on .wp-nav alone), so it picks up a soft blur of whatever's behind it without a
+   coloured/dimmed wash. (Kept in the DOM but not painted.) */
+.wp-nav-art, .wp-nav-scrim { display: none; }
+/* Truly full-bleed screens (visualizer / EQ) drop the nav's own panel + art-tint and just float — clean
+   icons over the immersive content. The PLAYER keeps the same floating frosted dock as Library/Home in
+   portrait (its own blurred-art tint + border/shadow), so the bottom tabs look consistent everywhere
+   you'd actually compare them. (Landscape has its own dock rules under the short-landscape media query.) */
+/* Player / Visualizer / EQ: fully transparent nav — clean icons floating over the immersive blurred-art
+   backdrop, no frosted panel (that panel read as a dark rectangle behind the dock on the player). */
+:root[data-tab="playing"] .wp-nav,
+:root[data-tab="visualizer"] .wp-nav,
+:root[data-tab="eq"] .wp-nav { background: transparent; border-color: transparent; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-tab="visualizer"] .wp-nav-art, :root[data-tab="visualizer"] .wp-nav-scrim,
+:root[data-tab="eq"] .wp-nav-art, :root[data-tab="eq"] .wp-nav-scrim { display: none; }
+/* Player: uses the same frosted, blurred-cover dock as Library/Home (no special-case solid surface). */
+.wp-nav-item {
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  flex: 1; border: none; background: none; color: var(--md-on-surface-variant);
+  padding: 5px 0; border-radius: var(--md-shape-full); min-width: 0;
+}
+.wp-nav-pill {
+  position: relative;
+  /* Clean rounded "squircle" indicator. (Settings → Look → Navigation → "Shape" swaps in Material shapes.) */
+  display: grid; place-items: center; width: 56px; height: 34px; border-radius: 17px;
+  transition: background var(--md-motion-standard), color var(--md-motion-standard),
+    transform 180ms cubic-bezier(.34, 1.56, .64, 1), box-shadow 180ms ease;
+}
+.wp-nav-active { color: var(--md-on-surface); }
+.wp-nav-active .wp-nav-pill {
+  background: var(--md-secondary-container); color: var(--md-on-secondary-container);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-primary) 24%, transparent);
+}
+.wp-nav-glyph { position: relative; z-index: 1; }
+/* Active-tab indicator style (Settings → Appearance → Navigation). "plain" = no background block
+   (just colour + scale), "shape" = a filled Material shape behind the glyph instead of the pill. */
+:root[data-nav-ind="plain"] .wp-nav-active .wp-nav-pill,
+:root[data-nav-ind="shape"] .wp-nav-active .wp-nav-pill { background: none; box-shadow: none; }
+.wp-nav-shape { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 0; pointer-events: none; }
+/* Vinyl spin of the centre (Player) tab. Honours reduced-motion / animations-off. */
+@keyframes wpVinyl { to { transform: rotate(360deg); } }
+.wp-nav-glyph.wp-nav-spin { animation: wpVinyl 3s linear infinite; transform-origin: 50% 50%; transform-box: fill-box; }
+:root[data-anim="off"] .wp-nav-glyph.wp-nav-spin { animation: none; }
+@include reduced-motion { .wp-nav-glyph.wp-nav-spin { animation: none; } }
+/* tap feedback (skipped while a hold is charging the bloom, which has its own scale). */
+.wp-nav-item:active:not(.wp-nav-charging):not(.wp-nav-rooted) .wp-nav-pill { transform: scale(.9); }
+
+/* 3 big icon-only tabs (Music · Player · Settings) */
+.wp-nav-3 .wp-nav-item { padding: 8px 0; }
+.wp-nav-3 .wp-nav-pill { width: 76px; height: 44px; }
+.wp-foryou-btn { color: var(--md-primary); }
+
+/* ── Wide screens: NO left rail (the nav is always the bottom bar — phone style). Just centre the content
+   column so it doesn't stretch edge-to-edge. Wide LANDSCAPE windows use the cover-left landscape player
+   (short-landscape mixin). ──────────────────────────────────────────────────────────────────────────── */
+@include desktop {
+  .wp-content { max-width: 1100px; margin-inline: auto; width: 100%; }
+  .wp-screen { max-width: 920px; margin: 0 auto; }
+  /* the player is full-bleed (its own backdrop + centered cover) — don't constrain it to the column, or
+     its blurred backdrop gets trapped in the centred box and the side/bottom gaps (behind the dock) fall
+     back to the dimmer app background. */
+  :root[data-tab="playing"] .wp-content { max-width: none; }
+}
+
+/* glyph contrast on the filled shape indicator */
+:root[data-nav-ind="shape"] .wp-nav-active .wp-nav-glyph { color: var(--md-on-secondary-container); }
+
+/* DJ-set auto-mix sheet (Playlists → DJ set) */
+.wp-djset-body { display: flex; flex-direction: column; gap: 8px; padding: 4px 2px 6px; }
+.wp-djset-curves { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.wp-djset-curve {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left;
+  padding: 9px 11px; border-radius: var(--md-shape-lg); cursor: pointer;
+  border: 1px solid var(--md-outline-variant); background: var(--md-surface-container); color: var(--md-on-surface);
+}
+.wp-djset-curve.on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); border-color: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-primary) 30%, transparent); }
+.wp-djset-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; }
+.wp-djset-go { justify-content: center; margin-top: 6px; }
+
+/* nav-shape picker (Settings → Look → Navigation) */
+.wp-shape-pick { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 6px 2px; }
+.wp-shape-chip {
+  width: 44px; height: 44px; display: grid; place-items: center; cursor: pointer;
+  border: 1px solid var(--md-outline-variant); border-radius: 12px;
+  background: var(--md-surface-container); color: var(--md-on-surface-variant);
+}
+.wp-shape-chip-on {
+  color: var(--md-on-secondary-container); background: var(--md-secondary-container);
+  border-color: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-primary) 30%, transparent);
+}
+
+/* Notification small-icon picker (Settings → Playback) — pick the white status-bar glyph. */
+.wp-notificon-pick { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.wp-notificon {
+  width: 34px; height: 34px; display: grid; place-items: center; cursor: pointer;
+  border: 1px solid var(--md-outline-variant); border-radius: 9px;
+  background: var(--md-surface-container); color: var(--md-on-surface-variant);
+}
+.wp-notificon-on {
+  color: var(--md-on-secondary-container); background: var(--md-secondary-container);
+  border-color: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-primary) 30%, transparent);
+}
+
+/* App-icon picker (Settings → Appearance) — grid of coloured "W" launcher-icon previews. */
+.wp-iconpick-block { display: flex; flex-direction: column; gap: 8px; padding: 8px 4px 4px; }
+.wp-iconpick { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 12px 8px; }
+.wp-icontile { display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; border: none; cursor: pointer; padding: 0; }
+.wp-icontile-art {
+  width: 54px; height: 54px; border-radius: 15px; display: grid; place-items: center;
+  font-weight: 800; font-size: 23px; line-height: 1; box-shadow: var(--md-elev-1);
+  outline: 2px solid transparent; outline-offset: 2px; transition: transform .12s, outline-color .15s;
+}
+.wp-icontile:active .wp-icontile-art { transform: scale(.93); }
+.wp-icontile-on .wp-icontile-art { outline-color: var(--md-primary); }
+.wp-icontile-label { font-size: 11px; color: var(--md-on-surface-variant); }
+.wp-icontile-on .wp-icontile-label { color: var(--md-on-surface); font-weight: 600; }
+
+/* ── Phone LANDSCAPE: a tidy CENTERED floating bottom bar, not the stretched wide rail ──────────
+   Overrides the desktop rail above (a phone in landscape matches both queries; this wins by order). */
+@include short-landscape {
+  /* The whole bottom is a TRANSPARENT floating row over the list: a compact player widget bottom-LEFT
+     (cover + title + timeline), the latte-dock tab panel centred, the list FAB on the right — all
+     out of the grid so the track list fills the FULL height and scrolls UNDER them (more songs shown). */
+  /* Content fills the FULL height; the floating docks (fixed) overlay the bottom and the list scrolls
+     UNDER them (you see songs flowing beneath the translucent dock). Scrollers + the player get bottom
+     CLEARANCE (below) so the last rows / the player controls can always be scrolled clear of the docks —
+     no half-clipped row, no controls hidden behind the bar. */
+  .wp-app { grid-template-columns: 1fr; grid-template-rows: 1fr; position: relative; }
+  .wp-content { grid-column: 1; grid-row: 1; min-height: 0; }
+  /* trailing scroll space = the floating-dock band, so the last songs lift clear of the docks on scroll */
+  .wp-vlist, .wp-library .wp-list, .wp-cats {
+    padding-bottom: calc(#{$dock-height} + env(safe-area-inset-bottom) + 18px);
+    scroll-padding-bottom: calc(#{$dock-height} + env(safe-area-inset-bottom) + 18px);
+  }
+  /* EQ: lift its preset chips + action buttons clear of the floating dock / media row (they were hidden
+     behind the bottom bar in landscape). overflow:auto so a short window can still reach them. */
+  .wp-eq {
+    box-sizing: border-box; height: 100%; overflow-y: auto;
+    padding-bottom: calc(#{$dock-height} + env(safe-area-inset-bottom) + 16px);
+  }
+
+  /* PLAYER → a compact frosted dock pinned bottom-left (cover + title + thin timeline). It shares the
+     EXACT height + radius + frosted surface as the tabs dock ($dock-* / dock-glass) so the two read as a
+     matched pair; still narrow, so the track list shows on either side + scrolls under it. */
+  .wp-mini-shell {
+    position: fixed; left: max(8px, env(safe-area-inset-left)); bottom: calc(8px + env(safe-area-inset-bottom));
+    z-index: 25; width: min(44vw, 300px); max-width: none; margin: 0;
+    height: $dock-height; border-radius: $dock-radius; @include dock-glass;
+  }
+  .wp-mini {
+    height: 100%; box-sizing: border-box; align-items: center; gap: 9px; padding: 0 12px;
+    background: none; border: none; box-shadow: none; border-radius: inherit;
+    -webkit-backdrop-filter: none; backdrop-filter: none;  /* the blur lives on the shell */
+  }
+  .wp-mini .wp-mini-art, .wp-mini .wp-mini-scrim { display: none; }
+  .wp-mini .wp-cover { width: 32px !important; height: 32px !important; }  /* fit the dock height */
+  .wp-mini-main .md-body-s { display: none; }                        /* keep it to cover + title */
+  .wp-mini > .wp-mini-btn:not(.wp-mini-play) { display: none; }      /* drop the extra Next — keep play/pause */
+  .wp-mini-play { width: 30px; height: 30px; box-shadow: none; }
+  /* timeline is in-flow under the title now → spans the text column between cover and play */
+  .wp-mini-prog-hit { padding: 3px 0; margin-top: 0; }       /* tighter grab area in the compact dock */
+  .wp-mini-prog { margin-top: 2px; height: 3px; border-radius: 2px; overflow: hidden;
+    background: color-mix(in srgb, var(--md-on-surface) 22%, transparent); }
+
+  .wp-nav {
+    position: fixed; left: 50%; bottom: calc(8px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+    z-index: 30; width: fit-content; max-width: 94vw; height: $dock-height; margin: 0; padding: 4px 16px;
+    flex-direction: row; justify-content: center; align-items: center; gap: 20px;
+    border-radius: $dock-radius; @include dock-glass; overflow: visible;  /* matched pair with the player */
+  }
+  /* immersive tabs already provide a rich blurred-art background → drop the panel, keep clean icons */
+  :root[data-tab="playing"] .wp-nav,
+  :root[data-tab="visualizer"] .wp-nav,
+  :root[data-tab="eq"] .wp-nav {
+    background: transparent; border-color: transparent; box-shadow: none;
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+  .wp-nav .wp-nav-art, .wp-nav .wp-nav-scrim { display: none; }
+  .wp-nav-item { flex: 0 0 auto; padding: 2px 6px; }
+  .wp-nav-3 .wp-nav-item { padding: 2px 6px; }
+  .wp-nav-3 .wp-nav-pill { width: 56px; height: 34px; }
+  .wp-screen { max-width: none; margin: 0; }
+
+  /* list Play/Shuffle FAB: sit in the dock band, same baseline + SAME HEIGHT as the player/tabs docks
+     ($dock-height) so all three line up. Right-edge inset handled on the base .wp-list-fab rule. */
+  .wp-list-fab, :root[data-mini="1"] .wp-list-fab { bottom: calc(8px + env(safe-area-inset-bottom)); }
+  .wp-lfab { height: $dock-height; padding: 0 18px; border-radius: $dock-radius; }
+  .wp-lfab-ghost { width: $dock-height; padding: 0; }
+}
+
+/* ── Visualizer: layered editor (P1+P2) ──────────────────────────────────── */
+.wp-mini-btn { width: 28px; height: 28px; }
+.wp-mini-btn svg { width: 18px; height: 18px; }
+.wp-mini-btn:disabled { opacity: 0.3; cursor: default; }
+
+/* fullscreen-open button on the tab preview */
+.wp-fs-open {
+  position: absolute; top: 10px; right: 10px; z-index: 2;
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+  border: none; border-radius: var(--md-shape-full);
+  background: color-mix(in srgb, var(--md-surface-container-highest) 80%, transparent);
+  color: var(--md-on-surface); font-size: 13px; font-weight: 600; backdrop-filter: blur(6px);
+}
+.wp-tpl-row { flex-wrap: wrap; gap: 8px; }
+.wp-tpl-row .wp-chip {
+  white-space: nowrap; height: 34px; font-weight: 600;
+  background: var(--md-surface-container-high); color: var(--md-on-surface); border-color: transparent;
+}
+.wp-tpl-row .wp-chip:hover { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.wp-tpl-head { padding: 2px 0; }
+
+/* layer list */
+.wp-layers { display: flex; flex-direction: column; gap: 8px; }
+.wp-layers-head { display: flex; align-items: center; justify-content: space-between; }
+.wp-add-types { display: flex; gap: 6px; flex-wrap: wrap; }
+.wp-layer-rows { display: flex; flex-direction: column; gap: 4px; }
+.wp-layer-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border-radius: var(--md-shape-md); background: var(--md-surface-container); cursor: pointer;
+}
+.wp-layer-row:hover { background: var(--md-surface-container-high); }
+.wp-layer-sel { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.wp-ly-vis {
+  width: 16px; height: 16px; flex-shrink: 0; border-radius: var(--md-shape-full);
+  border: 2px solid var(--md-outline); background: transparent;
+}
+.wp-ly-vis.on { background: var(--md-primary); border-color: var(--md-primary); }
+.wp-ly-icon { display: grid; place-items: center; color: var(--md-on-surface-variant); }
+.wp-ly-name { flex: 1; min-width: 0; }
+.wp-ly-actions { display: flex; align-items: center; gap: 0; }
+
+/* layer properties */
+.wp-props { display: flex; flex-direction: column; gap: 14px; }
+.wp-noprops { padding: 16px 4px; }
+.wp-field { display: flex; flex-direction: column; gap: 8px; }
+.wp-field-label { text-transform: uppercase; letter-spacing: 0.5px; }
+.wp-blend { display: flex; flex-direction: column; gap: 4px; }
+.wp-binds { display: flex; flex-direction: column; gap: 10px; }
+.wp-bind { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: var(--md-shape-md); background: var(--md-surface-container-low); }
+.wp-bind-head { display: flex; flex-direction: column; gap: 4px; }
+
+/* ── Fullscreen overlay + floating panel ─────────────────────────────────── */
+.wp-fs { position: fixed; inset: 0; z-index: 1000; background: #000; }
+.wp-fs-stage { position: absolute; inset: 0; display: grid; place-items: center; }
+.wp-fs-box { background: #000; overflow: hidden; box-shadow: 0 0 40px rgba(0,0,0,.6); }
+.wp-fs-box .wp-viz, .wp-fs-box .wp-viz canvas { width: 100%; height: 100%; display: block; }
+
+.wp-fs-top {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1050;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  padding-top: calc(10px + env(safe-area-inset-top));
+  background: linear-gradient(180deg, rgba(0,0,0,.55), transparent);
+  color: #fff; transition: opacity var(--md-motion-standard);
+}
+.wp-fs-top .md-icon-btn { color: #fff; }
+.wp-fs-spacer { flex: 1; }
+.wp-fs-aspect { background: rgba(255,255,255,.12); }
+.wp-fs-aspect .wp-seg-item { color: rgba(255,255,255,.7); }
+.wp-fs-aspect .wp-seg-on { background: rgba(255,255,255,.9); color: #000; }
+.wp-hidden { opacity: 0; pointer-events: none; }
+
+.wp-float {
+  position: fixed; z-index: 1100; width: 312px; max-width: calc(100vw - 24px);
+  display: flex; flex-direction: column; max-height: 78vh;
+  /* GLASS: the visualizer stays visible through the editor (the customisation menu
+     floats ON the art, never hides it) */
+  background: color-mix(in srgb, var(--md-surface-container-high) 58%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  backdrop-filter: blur(18px) saturate(1.25);
+  color: var(--md-on-surface);
+  border-radius: var(--md-shape-lg); box-shadow: var(--md-elev-3);
+  border: 1px solid color-mix(in srgb, var(--md-outline-variant) 60%, transparent); overflow: hidden;
+}
+.wp-float-collapsed { max-height: none; }
+.wp-float-head {
+  display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px;
+  cursor: grab; touch-action: none; user-select: none;
+  background: var(--md-surface-container-highest);
+}
+.wp-float-head:active { cursor: grabbing; }
+.wp-float-title { flex: 1; min-width: 0; }
+.wp-float-body { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.wp-float-tabs { display: flex; gap: 2px; padding: 8px 8px 0; }
+.wp-ftab { flex: 1; height: 32px; border: none; background: transparent; color: var(--md-on-surface-variant); font-size: 13px; font-weight: 600; border-radius: var(--md-shape-sm); }
+.wp-ftab-on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.wp-float-scroll { overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+
+/* drag-and-drop music overlay (Library) */
+.wp-drop-overlay {
+  position: fixed; inset: 0; z-index: 50; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  background: color-mix(in srgb, var(--md-primary) 14%, transparent);
+  border: 3px dashed var(--md-primary); border-radius: var(--md-shape-lg);
+  color: var(--md-primary);
+}
+
+/* ── Avee-style grouped property editor ──────────────────────────────────── */
+.wp-section { border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md); overflow: hidden; background: var(--md-surface-container-low); }
+.wp-section-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 10px 12px; border: none; background: var(--md-surface-container); color: var(--md-on-surface);
+}
+.wp-section-head:hover { background: var(--md-surface-container-high); }
+.wp-section-title { flex: 1; text-align: left; }
+.wp-section-body { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.wp-props { display: flex; flex-direction: column; gap: 10px; }
+
+/* bindable slider: a ⚡ link toggles an inline source + amount control */
+.wp-bslider { display: flex; flex-direction: column; gap: 6px; }
+.wp-bslider-row { display: flex; align-items: center; gap: 6px; }
+.wp-bslider-main { flex: 1; min-width: 0; }
+.wp-bindbtn {
+  flex-shrink: 0; width: 28px; height: 28px; border-radius: var(--md-shape-full);
+  border: 1px solid var(--md-outline-variant); background: transparent; color: var(--md-on-surface-variant);
+  display: grid; place-items: center;
+}
+.wp-bindbtn.on { background: var(--md-primary); color: var(--md-on-primary); border-color: transparent; }
+.wp-bind-pop {
+  display: flex; flex-direction: column; gap: 8px; padding: 8px;
+  border-radius: var(--md-shape-md); background: var(--md-surface-container-high);
+  border-left: 2px solid var(--md-primary);
+}
+
+/* text/url inputs in the property editor */
+.wp-text-input {
+  flex: 1; min-width: 0; height: 32px; padding: 0 10px;
+  border-radius: var(--md-shape-sm); border: 1px solid var(--md-outline-variant);
+  background: var(--md-surface-container-high); color: var(--md-on-surface); font: inherit; font-size: 13px;
+}
+.wp-text-input:focus { outline: none; border-color: var(--md-primary); }
+
+/* ── Right-click context menu ─────────────────────────────────────────────── */
+.wp-ctx-overlay { position: fixed; inset: 0; z-index: 1200; }
+.wp-ctx {
+  position: fixed; min-width: 180px; padding: 6px;
+  background: var(--md-surface-container-high); color: var(--md-on-surface);
+  border: 1px solid var(--md-outline-variant); border-radius: var(--md-shape-md);
+  box-shadow: var(--md-elev-3); display: flex; flex-direction: column; gap: 1px;
+}
+.wp-ctx-item {
+  position: relative; display: flex; align-items: center; gap: 10px;
+  height: 34px; padding: 0 10px; border: none; background: none; color: inherit;
+  border-radius: var(--md-shape-sm); font-size: 13px; text-align: left;
+}
+.wp-ctx-item:hover { background: var(--md-surface-container-highest); }
+.wp-ctx-item.danger { color: var(--md-error); }
+.wp-ctx-label { flex: 1; }
+.wp-ctx-item svg:last-child { color: var(--md-on-surface-variant); }
+.wp-ctx-sep { height: 1px; margin: 4px 6px; background: var(--md-outline-variant); }
+
+.wp-gpu-warn { display: flex; align-items: center; gap: 8px; color: var(--md-on-surface-variant); padding: 4px 0; }
+
+/* ── Library: views, grid, covers, virtualized list ──────────────────────── */
+.wp-library { display: flex; flex-direction: column; overflow: hidden; }
+.wp-lib-controls { display: flex; gap: 8px; flex-wrap: wrap; padding-bottom: 8px; flex-shrink: 0; }
+/* ONE horizontally-scrolling row of library tabs (swipe or tap). No wrap; hidden scrollbar. */
+.wp-tabs-row {
+  display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; flex-shrink: 0;
+  padding: 2px 0 8px; scrollbar-width: none; scroll-behavior: smooth; -webkit-overflow-scrolling: touch;
+}
+.wp-tabs-row::-webkit-scrollbar { display: none; }
+.wp-tab {
+  flex: 0 0 auto; height: 34px; padding: 0 16px; border: none; border-radius: var(--md-shape-full);
+  background: var(--md-surface-container); color: var(--md-on-surface-variant);
+  font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s;
+}
+.wp-tab-on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+/* the content pane slides in from the swipe direction (re-keyed on tab change) */
+.wp-tab-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wp-tab-pane > * { min-height: 0; }
+/* Tab/section switch: the new pane slides in from the side as a SOLID window (full opacity + a leading
+   edge shadow), so it reads like the next window arriving — not a faint fade over blank. */
+.wp-tab-pane-r, .wp-tab-pane-l { will-change: transform; }
+.wp-tab-pane-r { animation: wpPaneR .28s cubic-bezier(.16,1,.3,1) both; }
+.wp-tab-pane-l { animation: wpPaneL .28s cubic-bezier(.16,1,.3,1) both; }
+@keyframes wpPaneR {
+  from { transform: translateX(12%); box-shadow: -22px 0 32px rgba(0,0,0,.28); }
+  to   { transform: translateX(0);   box-shadow: -22px 0 0 rgba(0,0,0,0); }
+}
+@keyframes wpPaneL {
+  from { transform: translateX(-12%); box-shadow: 22px 0 32px rgba(0,0,0,.28); }
+  to   { transform: translateX(0);    box-shadow: 22px 0 0 rgba(0,0,0,0); }
+}
+:root[data-anim="off"] .wp-tab-pane-r, :root[data-anim="off"] .wp-tab-pane-l { animation: none; }
+.wp-library { overflow-x: hidden; }
+/* Sort & filter trigger (in the top action bar — no extra row) */
+.wp-sf-iconbtn { position: relative; }
+.wp-sf-dot {
+  position: absolute; top: 5px; right: 5px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--md-primary); border: 2px solid var(--md-surface);
+}
+/* Sort & filter sheet */
+.wp-sf-sheet { max-height: 82vh; }
+.wp-sf-body { overflow-y: auto; padding: 6px 4px 4px; display: flex; flex-direction: column; gap: 2px; }
+.wp-sf-label { padding: 14px 4px 5px; text-transform: uppercase; letter-spacing: .04em; }
+.wp-sf-chips { display: flex; flex-wrap: wrap; gap: 7px; padding: 0 2px; }
+.wp-sf-grid { display: flex; align-items: center; gap: 12px; padding: 4px 2px; }
+.wp-sf-grid-dots { display: flex; align-items: center; gap: 7px; flex: 1; justify-content: center; }
+.wp-sf-grid-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--md-surface-container-highest); transition: background .15s, transform .15s; }
+.wp-sf-grid-dot.on { background: var(--md-primary); transform: scale(1.25); }
+/* Playlist / collection detail toolbar — a FLOATING FIXED frosted bar pinned at the top; the track
+   list scrolls beneath it. (It's a flex-shrink:0 sibling above the scroller, so it never scrolls away;
+   sticky top is a belt-and-braces for any scrolling ancestor.) */
+.wp-detail-head {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 6;
+  margin: 2px 0 8px; padding: 8px 10px;
+  background: color-mix(in srgb, var(--md-surface-container-high) 82%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3);
+  border: 1px solid color-mix(in srgb, var(--md-outline-variant) 70%, transparent);
+  border-radius: var(--md-shape-lg); box-shadow: 0 6px 20px rgba(0,0,0,.28);
+}
+/* Title keeps priority + a readable minimum so it never collapses to "Qu…"; the action cluster is one
+   unsplittable group that drops to its own line on narrow screens instead of starving the title. */
+.wp-detail-head > .wp-row-text { flex: 1 1 140px; min-width: 0; }
+.wp-detail-head > .wp-search-input { flex: 1 1 140px; min-width: 0; }
+.wp-detail-acts { display: flex; align-items: center; gap: 4px; margin-left: auto; flex-shrink: 0; }
+/* Playlist detail: a floating-fixed action toolbar pinned at the top + the title in its OWN full row
+   below it; the track list scrolls beneath both. */
+.wp-detail-bar {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  position: sticky; top: 0; z-index: 6; margin: 2px 0 6px; padding: 6px 8px;
+  background: color-mix(in srgb, var(--md-surface-container-high) 82%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3);
+  border: 1px solid color-mix(in srgb, var(--md-outline-variant) 70%, transparent);
+  border-radius: var(--md-shape-full); box-shadow: 0 6px 20px rgba(0,0,0,.28);
+}
+.wp-detail-title { flex-shrink: 0; padding: 0 8px 10px; }
+.wp-detail-title .wp-row-text .md-title-m { font-weight: 700; }
+.wp-detail-title .wp-search-input { width: 100%; }
+
+/* contain isolates the (very tall) windowed spacer so an animating ancestor sheet doesn't
+   rasterize the whole 2M-px list — avoids the queue-open hitch on Android WebView. */
+.wp-vlist { flex: 1; min-height: 0; overflow-y: auto; contain: layout paint; overscroll-behavior: contain; }
+/* Wrapper added only when a VirtualGrid has a fast-scroll indicator — takes the list's flex slot and
+   lays the scroller out as flex:1 so the (absolute) thumb can float over its right edge. */
+/* margin-right escapes the screen's 12px side padding so the rail/thumb floats flush at the real edge. */
+.wp-vscroll-wrap { flex: 1 1 auto; min-height: 0; height: 100%; position: relative; display: flex; flex-direction: column; margin-right: -12px; }
+/* always faintly visible so there's a grab handle at rest, brighter while scrolling/dragging */
+.wp-fastscroll { position: absolute; inset: 0 0 0 auto; width: 30px; z-index: 6; pointer-events: none; opacity: .5; transition: opacity .2s; }
+.wp-fastscroll-show { opacity: 1; }
+.wp-fs-thumb {
+  position: absolute; top: 0; right: 3px; width: 8px; height: 46px; padding: 0; border: none;
+  border-radius: 5px; cursor: grab; touch-action: none; pointer-events: auto;
+  background: color-mix(in srgb, var(--md-primary) 78%, var(--md-on-surface));
+  box-shadow: 0 1px 5px rgba(0, 0, 0, .45); transition: width .12s, background .12s;
+}
+.wp-fastscroll-drag .wp-fs-thumb { width: 11px; cursor: grabbing; background: var(--md-primary); }
+.wp-fs-bubble {
+  position: absolute; top: 0; right: 20px; min-width: 44px; height: 46px; padding: 0 14px;
+  display: flex; align-items: center; justify-content: center; white-space: nowrap;
+  background: var(--md-primary); color: var(--md-on-primary); font-weight: 800; font-size: 18px;
+  border-radius: 16px 16px 4px 16px; box-shadow: var(--md-elev-2); pointer-events: none;
+}
+/* A–Z (or year/★/…) index rail: a SEPARATE floating strip flush to the right edge. */
+.wp-azrail {
+  position: absolute; right: 0; top: 10px; bottom: 10px; width: 20px; z-index: 6; touch-action: none; user-select: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 7px 0;
+  background: color-mix(in srgb, var(--md-surface-container-high) 60%, transparent);
+  border-radius: 11px 0 0 11px; box-shadow: -2px 0 10px rgba(0, 0, 0, .22);
+}
+.wp-azrail-drag { background: color-mix(in srgb, var(--md-surface-container-highest) 82%, transparent); }
+.wp-az-letter {
+  flex: 1 1 0; display: flex; align-items: center; justify-content: center;
+  font-size: 9.5px; font-weight: 700; line-height: 1; color: var(--md-on-surface-variant); opacity: .85;
+  transition: color .1s, transform .1s;
+}
+.wp-azrail-drag .wp-az-letter { color: var(--md-on-surface); }
+.wp-az-on { color: var(--md-primary) !important; transform: scale(1.35); }
+.wp-az-bubble {
+  position: absolute; right: 30px; top: 50%; transform: translateY(-50%);
+  min-width: 60px; height: 60px; padding: 0 16px; display: flex; align-items: center; justify-content: center;
+  background: var(--md-primary); color: var(--md-on-primary); font-weight: 800; font-size: 26px; white-space: nowrap;
+  border-radius: 20px; box-shadow: var(--md-elev-3); pointer-events: none;
+}
+/* virtualised Albums/Artists grid wrapper (measures width → responsive columns) */
+.wp-tilegrid-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wp-tilegrid { padding-bottom: 12px; }
+.wp-tilegrid .wp-tile { width: 100%; }
+.wp-vlist .wp-row { height: 100%; }
+.wp-library .wp-list { flex: 1; min-height: 0; overflow-y: auto; }
+
+.wp-cover { display: grid; place-items: center; overflow: hidden; flex-shrink: 0;
+  background: var(--md-surface-container-highest); color: var(--md-on-surface-variant); }
+.wp-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wp-cover > .wp-crossart { width: 100%; height: 100%; } /* cross-dissolving cover fills the tile */
+/* Sound-DNA canvas fills its (square) parent; the glyph is rendered at a capped resolution and
+   stretched here, so callers never need to size the canvas itself. */
+.wp-dna { width: 100%; height: 100%; display: block; }
+
+.wp-grid { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; align-content: start; padding-bottom: 12px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 18px 14px; }
+.wp-tile { display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+  border: none; background: none; text-align: left; color: inherit; padding: 0; min-width: 0; max-width: 100%; cursor: pointer; }
+.wp-tile .wp-cover { width: 100% !important; height: auto !important; aspect-ratio: 1; box-shadow: var(--md-elev-1);
+  transition: transform .12s ease; }
+.wp-tile:active .wp-cover { transform: scale(.97); }
+.wp-tile-title { font-weight: 600; max-width: 100%; line-height: 1.25; }
+.wp-tile > .md-body-s { max-width: 100%; }
+.wp-grid-round .wp-tile .wp-cover { border-radius: var(--md-shape-full) !important; }
+.wp-grid-round .wp-tile { align-items: center; text-align: center; }
+
+.wp-bind-label { padding-top: 2px; }
+.wp-bind-clamp { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; border-top: 1px solid var(--md-outline-variant); }
+.wp-bind-freq { display: flex; align-items: center; gap: 6px; }
+.wp-bind-freq .wp-num {
+  width: 64px; flex: 1; min-width: 0; padding: 6px 8px; border-radius: var(--md-shape-sm);
+  border: 1px solid var(--md-outline-variant); background: var(--md-surface-container-highest); color: var(--md-on-surface); font: inherit;
+}
+.wp-bind-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+.wp-bind-presets .wp-chip-sm {
+  border: 1px solid var(--md-outline-variant); background: var(--md-surface-container-high); color: var(--md-on-surface-variant);
+  border-radius: var(--md-shape-full); cursor: pointer;
+}
+.wp-bind-presets .wp-chip-sm:hover { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+
+/* visualizer Scenes tab — template gallery cards */
+.wp-scene-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.wp-scene-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px;
+  border: none; border-radius: var(--md-shape-md); background: var(--md-surface-container-high);
+  color: var(--md-on-surface); text-align: left;
+}
+.wp-scene-card:hover { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.wp-scene-thumb {
+  display: grid; place-items: center; width: 100%; height: 56px; border-radius: var(--md-shape-sm);
+  background: linear-gradient(160deg, var(--md-surface-container-low), var(--md-surface-container-lowest));
+}
+
+/* ── Sectioned search (Poweramp-style) ───────────────────────────────────── */
+.wp-search-results { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-bottom: 12px; }
+.wp-sec { display: flex; flex-direction: column; gap: 6px; }
+.wp-sec-head { display: flex; align-items: center; gap: 8px; padding: 2px 4px; }
+.wp-sec-more { margin-left: auto; background: none; border: none; color: var(--md-primary); font-weight: 600; }
+.wp-sec-rows { display: flex; flex-direction: column; }
+.wp-sec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 12px; }
+.wp-sec-grid .wp-tile .wp-cover { width: 100% !important; height: auto !important; aspect-ratio: 1; }
+.wp-sec-grid.wp-grid-round .wp-tile { align-items: center; text-align: center; }
+.wp-sec-grid.wp-grid-round .wp-tile .wp-cover { border-radius: var(--md-shape-full) !important; }
+
+/* ── Track row with trailing menu (⋮) ───────────────────────────────────────── */
+.wp-row-wrap { position: relative; display: flex; align-items: center; width: 100%; border-radius: var(--md-shape-md); }
+.wp-row-wrap.wp-row-active {
+  background: var(--md-secondary-container); color: var(--md-on-secondary-container);
+  border-radius: var(--md-shape-lg);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--md-primary) 60%, transparent);
+}
+.wp-row-wrap > .wp-row { flex: 1; min-width: 0; padding-right: 40px; }
+.wp-row-wrap.wp-row-active > .wp-row:hover { background: transparent; }
+.wp-row-dur { flex-shrink: 0; }
+/* per-song pinned-EQ badge in track rows */
+.wp-row-eqbadge { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; color: var(--md-primary); background: color-mix(in srgb, var(--md-primary) 16%, transparent); }
+.wp-row-menu { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; }
+.wp-vlist .wp-row-wrap { height: 100%; }
+
+/* ── Bottom sheets (Queue / Track actions) ──────────────────────────────────── */
+.wp-sheet-backdrop {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-end; justify-content: center;
+  background: color-mix(in srgb, var(--md-scrim) 55%, transparent); animation: wpFade .14s ease;
+}
+@keyframes wpFade { from { opacity: 0; } to { opacity: 1; } }
+.wp-sheet {
+  width: 100%; max-width: 560px; max-height: 72vh; display: flex; flex-direction: column;
+  background: var(--md-surface-container-high); color: var(--md-on-surface);
+  border-radius: var(--md-shape-xl) var(--md-shape-xl) 0 0; box-shadow: var(--md-elev-3);
+  /* bottom inset → the sheet's surface extends behind the (transparent) system nav bar, so the
+     gesture area takes the SHEET's colour while it's open instead of a mismatched strip. */
+  padding: 8px 10px calc(14px + env(safe-area-inset-bottom)); animation: wpSlideUp .3s cubic-bezier(.16,1,.3,1);
+  will-change: transform; /* pre-promote the layer so the slide-up starts on the compositor, no first-frame stutter */
+}
+.wp-sheet-tall { height: calc(72vh + env(safe-area-inset-bottom)); }
+/* tap-out / Esc close: slide the sheet back down + fade the scrim before unmounting */
+.wp-sheet-backdrop.wp-sheet-closing { animation: wpFadeOut .23s ease forwards; }
+.wp-sheet-backdrop.wp-sheet-closing .wp-sheet { animation: wpSheetDown .23s cubic-bezier(.4, 0, 1, 1) forwards; }
+@keyframes wpFadeOut { to { opacity: 0; } }
+@keyframes wpSheetDown { from { transform: translateY(0); } to { transform: translateY(110%); } }
+.wp-folderpick-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; padding-top: 6px; }
+/* ── Poweramp-style folder tree picker ─────────────────────────────────────── */
+.wp-ftree-list { flex: 1; overflow-y: auto; padding: 6px 2px; -webkit-overflow-scrolling: touch; }
+.wp-ftree-row { display: flex; align-items: center; gap: 4px; min-height: 46px; padding-right: 6px; border-radius: 10px; }
+.wp-ftree-row:active { background: var(--md-surface-container-high); }
+.wp-ftree-twist { display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; color: var(--md-on-surface-variant); background: none; border: 0; transition: transform .16s ease; }
+.wp-ftree-twist svg { transform: rotate(-90deg); transition: transform .16s ease; } /* collapsed = ▶ */
+.wp-ftree-twist.open svg { transform: rotate(0deg); }                                /* open = ▼ */
+.wp-ftree-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; background: none; border: 0; text-align: left; padding: 4px 0; color: inherit; }
+.wp-ftree-text { min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.wp-ftree-check { flex-shrink: 0; width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; border: 2px solid var(--md-outline); background: transparent; color: var(--md-on-surface-variant); transition: background .12s, color .12s, border-color .12s; }
+.wp-ftree-check.on { background: var(--md-primary); border-color: var(--md-primary); color: var(--md-on-primary); }
+.wp-ftree-check.inherited { opacity: .5; }
+.wp-ftree-check:active { transform: scale(.92); }
+.wp-ftree-actions { display: flex; flex-direction: column; gap: 1px; flex-shrink: 0; border-top: 1px solid var(--md-outline-variant); padding-top: 4px; }
+.wp-ftree-btn { display: flex; align-items: center; justify-content: center; gap: 8px; height: 52px; background: none; border: 0; color: var(--md-on-surface); font: inherit; font-weight: 600; }
+.wp-ftree-btn:active { background: var(--md-surface-container-high); }
+.wp-ftree-btn + .wp-ftree-btn { border-top: 1px solid var(--md-outline-variant); }
+.wp-ftree-primary { color: var(--md-primary); }
+.wp-ftree-btn:disabled { opacity: .4; }
+/* slide the whole sheet up from below the screen edge (smooth, emphasized ease-out) */
+@keyframes wpSlideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+/* the grip + header are the drag handle for swipe-to-dismiss — `touch-action:none` lets the pointer
+   drag fire reliably instead of the browser stealing it as a scroll. Bigger grip = easier to grab. */
+.wp-sheet-grip { width: 44px; height: 5px; border-radius: 3px; background: var(--md-outline); margin: 2px auto 8px; flex-shrink: 0; touch-action: none; }
+.wp-sheet-head { display: flex; align-items: center; gap: 10px; padding: 4px 6px 10px; border-bottom: 1px solid var(--md-outline-variant); flex-shrink: 0; touch-action: none; }
+.wp-queue-head { gap: 8px; }
+.wp-sheet-actions { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; padding-top: 6px; }
+.wp-sheet-item {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 10px; border: none; cursor: pointer;
+  background: none; color: var(--md-on-surface); text-align: left; border-radius: var(--md-shape-md);
+}
+.wp-sheet-item:hover { background: var(--md-surface-container-highest); }
+.wp-sheet-hero { background: color-mix(in srgb, var(--md-primary) 9%, transparent); }
+.wp-sheet-hero:hover { background: color-mix(in srgb, var(--md-primary) 16%, transparent); }
+.wp-sheet-item > span:first-of-type { flex: 1; }
+.wp-sheet-danger { color: var(--md-error, #ef5350); }
+.wp-sheet-danger:hover { background: color-mix(in srgb, var(--md-error, #ef5350) 12%, transparent); }
+
+/* ── Queue list ─────────────────────────────────────────────────────────────── */
+.wp-queue-tools { display: flex; gap: 8px; overflow-x: auto; padding: 8px 4px 4px; scrollbar-width: none; }
+.wp-queue-tools::-webkit-scrollbar { display: none; }
+.wp-queue-tools .wp-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; }
+.wp-queue-list { flex: 1; min-height: 0; overflow-y: auto; padding-top: 6px; contain: layout paint; overscroll-behavior: contain; }
+.wp-qrow { display: flex; align-items: center; gap: 4px; border-radius: var(--md-shape-md); padding-right: 2px; }
+.wp-qrow.wp-row-active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.wp-qrow-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; border: none; background: none; color: inherit; text-align: left; padding: 6px 8px; cursor: pointer; }
+.wp-qrow-now { width: 38px; height: 38px; display: grid; place-items: center; flex-shrink: 0; color: var(--md-primary); }
+.wp-qrow-actions { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
+.wp-icon-sm { width: 32px; height: 32px; }
+.wp-icon-sm:disabled { opacity: .3; cursor: default; }
+
+/* ── New-playlist input row ─────────────────────────────────────────────────── */
+.wp-newpl { display: flex; align-items: center; gap: 8px; padding: 6px; }
+.wp-newpl .wp-search-input { flex: 1; background: var(--md-surface-container-highest); border-radius: var(--md-shape-md); padding: 8px 12px; }
+.wp-newpl-row { border-bottom: 1px solid var(--md-outline-variant); margin-bottom: 4px; }
+
+/* ── Settings ───────────────────────────────────────────────────────────────── */
+.wp-settings { display: flex; flex-direction: column; gap: 18px; overflow-x: hidden; }
+/* Settings drill-in/out pane: carries the column layout so the sliding wrapper preserves section spacing. */
+.wp-set-pane { display: flex; flex-direction: column; gap: 18px; }
+.wp-set-sec { display: flex; flex-direction: column; gap: 2px; }
+/* OPT-IN container: add `wp-set-card` to a section that should be a boxed group (not every section). */
+.wp-set-sec.wp-set-card {
+  gap: 0;
+  background: color-mix(in srgb, var(--md-surface-container-high) 58%, transparent);
+  border: 1px solid color-mix(in srgb, var(--md-outline-variant) 70%, transparent);
+  border-radius: 22px; padding: 6px 8px 8px;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  box-shadow: 0 2px 10px rgba(0,0,0,.14);
+}
+.wp-set-card .wp-set-row + .wp-set-row { border-top: 1px solid color-mix(in srgb, var(--md-outline-variant) 45%, transparent); }
+/* Labelled card group (boxes a related cluster of rows) + robust long-text handling so a long title/
+   description never crowds or overlaps the switch: title wraps, description clamps to 2 lines. */
+.wp-set-group { display: flex; flex-direction: column; gap: 2px; }
+.wp-set-title-line .md-body-l { overflow-wrap: anywhere; }
+.wp-set-sub { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; }
+
+/* Listening stats */
+.wp-stat-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 4px 0 12px; }
+.wp-stat-card { display: flex; flex-direction: column; gap: 2px; padding: 12px; border-radius: var(--md-shape-lg); background: var(--md-surface-container-low); }
+.wp-stat-num { color: var(--md-primary); }
+.wp-stat-block { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+.wp-stat-h { letter-spacing: 1.2px; padding: 2px 4px 4px; }
+.wp-stat-row { display: flex; align-items: center; gap: 12px; padding: 6px 6px; border-radius: var(--md-shape-md); }
+.wp-stat-row .wp-row-text { flex: 1; min-width: 0; }
+.wp-stat-row-btn { width: 100%; border: none; background: none; color: inherit; text-align: left; cursor: pointer; }
+.wp-stat-row-btn:hover { background: var(--md-surface-container); }
+.wp-stat-rank { width: 22px; text-align: center; color: var(--md-on-surface-variant); flex-shrink: 0; }
+.wp-set-head { color: var(--md-primary); padding: 0 6px 4px; }
+.wp-set-row { display: flex; align-items: center; gap: 12px; padding: 10px 6px; border-radius: var(--md-shape-md); }
+.wp-set-row:hover { background: var(--md-surface-container); }
+.wp-set-icon { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0;
+  border-radius: var(--md-shape-full); background: var(--md-surface-container-highest); color: var(--md-on-surface-variant); }
+.wp-set-control { flex-shrink: 0; display: flex; align-items: center; }
+.wp-btn-sm { height: 34px; padding: 0 16px; font-size: 13px; }
+
+/* ── Touch ergonomics: bigger tap targets on coarse (finger) pointers ──────── */
+@include coarse {
+  .md-icon-btn { width: 46px; height: 46px; }
+  .wp-row { min-height: 60px; }
+  .wp-row-menu { width: 44px; height: 44px; }
+  .wp-seg-item { padding: 9px 14px; }
+  .wp-chip { min-height: 38px; }
+  .wp-sheet-item { padding: 15px 12px; }
+  .wp-nav-item { padding-top: 10px; }
+  .wp-qrow-main { padding: 10px 8px; }
+}
+.wp-sheet-grip { cursor: grab; }
+
+/* ── Reorderable playlist list (drag the ☰ handle; auto-scrolls at the edges) ── */
+.wp-pl-reorder { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 4px 12px; }
+.wp-pl-row { position: relative; display: flex; align-items: center; gap: 4px; border-radius: var(--md-shape-md); }
+.wp-pl-row.wp-pl-dragging { opacity: .4; }
+.wp-pl-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: none; background: none; color: inherit; text-align: left; cursor: pointer; }
+.wp-pl-main .wp-row-text { flex: 1; min-width: 0; }
+.wp-pl-handle { touch-action: none; cursor: grab; color: var(--md-on-surface-variant); }
+.wp-pl-drop { position: absolute; top: -1px; left: 8px; right: 8px; height: 2px; border-radius: 1px; background: var(--md-primary); box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-primary) 40%, transparent); }
+
+/* ── Now Playing: customizable layout (#118) ───────────────────────────────── */
+.wp-np { position: relative; }
+.wp-np > :not(.wp-np-backdrop) { position: relative; z-index: 1; }
+.wp-np-backdrop {
+  /* FULL-VIEWPORT (fixed) so the player's blurred art continues seamlessly BEHIND + BELOW the floating
+     nav — otherwise the content area ended above the nav and the strip below it showed the app backdrop's
+     darker bottom scrim, reading as a mismatched dark layer under the tabs. */
+  position: fixed; inset: 0; z-index: 0; overflow: hidden;
+}
+/* Perf: same trick as the app backdrop — blur a DOWNSCALED (~34%) art layer and scale it back up, so the
+   blur kernel runs on ~11× fewer pixels for the same look. This was a full-size blur(44px) that re-
+   rasterized on every player-open AND on every rotate — a big chunk of the "UI catches up after rotate"
+   hitch. `contain` isolates the re-raster from the rest of the layout. */
+.wp-np-backdrop-img {
+  /* Downscaled blur for perf (see .wp-appbg-img). Box is viewport-aspect → `cover` crops (no stretch),
+     scaled 3.4× → overscans the viewport (no black edges). NOTE: no `contain: strict` — it collapsed the
+     element on webkit2gtk, which is what made the player backdrop go black. */
+  position: absolute; top: 50%; left: 50%; width: 34%; height: 34%;
+  background-size: cover; background-position: center;
+  filter: blur(calc(44px / 3.4)) saturate(1.3);
+  transform: translate(-50%, -50%) scale(3.4); transform-origin: center; will-change: transform;
+}
+/* Contrast scrim over the blurred art — theme-aware so the player text/controls are always readable.
+   (Previously a hardcoded brightness(.45) darkened it, which made LIGHT-mode dark text invisible.) */
+.wp-np-backdrop::after { content: ""; position: absolute; inset: 0; background: rgba(0, 0, 0, var(--np-scrim, .25)); }
+:root[data-theme="light"] .wp-np-backdrop::after { background: rgba(247, 247, 249, var(--np-scrim-l, .5)); }
+/* Customizable backdrop dim (Customize player → Background → Dim). */
+.wp-np-dim-off { --np-scrim: 0; --np-scrim-l: 0; }
+.wp-np-dim-soft { --np-scrim: .22; --np-scrim-l: .45; }
+.wp-np-dim-strong { --np-scrim: .74; --np-scrim-l: .88; }
+.wp-np-bg-gradient { background: radial-gradient(120% 80% at 50% 0%, var(--md-surface-container-high), var(--md-background) 70%); }
+.wp-np-bg-solid { background: var(--md-surface-container-low); }
+
+/* stage size — keep the artwork a centred SQUARE (capped height) so the seekbar + section strip below
+   it can never crop it into a short, wide rectangle (the "squeeze"). When vertical space is tight it
+   shrinks but stays square. bigArt opts out (fills, by design). */
+.wp-np-stage { flex: 1; }
+.wp-np-stage:not(.wp-np-stage-big) {
+  flex: 0 1 auto; min-height: 0; aspect-ratio: 1 / 1;
+  width: auto; height: auto; max-width: 100%; max-height: 46vh; align-self: center;
+}
+/* lyrics read better full-width than square → restore a wide box for the lyrics view */
+.wp-np-stage-lyrics:not(.wp-np-stage-big) { aspect-ratio: auto; width: 100%; height: 38vh; max-height: 38vh; }
+/* Big art stays 1:1 too — a LARGER square that fills more of the column, never a wide rectangle. (Portrait
+   only; the landscape media queries keep their own height-bound square.) */
+@media (orientation: portrait) {
+  .wp-np-stage-big:not(.wp-np-stage-lyrics) {
+    flex: 0 1 auto; aspect-ratio: 1 / 1; width: auto; height: auto; max-width: 100%; max-height: 62vh; align-self: center;
+  }
+}
+/* stage shapes */
+.wp-shape-square { border-radius: var(--md-shape-sm); }
+.wp-shape-circle {
+  border-radius: var(--md-shape-full); aspect-ratio: 1; flex: 0 1 auto;
+  width: auto; max-width: min(100%, 60vh); align-self: center; margin: 4px auto;
+}
+
+/* ── Accent swatches (Settings → Appearance) ───────────────────────────────── */
+.wp-swatches { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; max-width: 200px; }
+.wp-swatch {
+  width: 28px; height: 28px; border-radius: var(--md-shape-full); border: 2px solid transparent;
+  cursor: pointer; padding: 0; transition: transform var(--md-motion-standard);
+}
+.wp-swatch:hover { transform: scale(1.12); }
+.wp-swatch-on { border-color: var(--md-on-surface); box-shadow: 0 0 0 2px var(--md-surface); }
+@include coarse { .wp-swatch { width: 34px; height: 34px; } }
+
+/* ── Playlists: smart + import + rules ─────────────────────────────────────── */
+.wp-pl-actions { display: flex; gap: 8px; padding: 2px 6px 8px; }
+.wp-pl-actions .wp-text-btn { padding: 8px 12px; }
+.wp-smart-tag { color: var(--md-primary); }
+.wp-rule { display: flex; align-items: center; gap: 6px; padding: 4px 6px; }
+.wp-rule .wp-chip { white-space: nowrap; }
+.wp-rule-val { flex: 1; min-width: 40px; background: var(--md-surface-container-highest); border-radius: var(--md-shape-sm); padding: 6px 10px; }
+
+/* ── Star rating (Now Playing) ─────────────────────────────────────────────── */
+.wp-stars { display: flex; gap: 2px; margin-top: 4px; }
+.wp-star { background: none; border: none; padding: 2px; cursor: pointer; display: grid; place-items: center; }
+
+/* ── Lyrics (Now Playing stage) ────────────────────────────────────────────── */
+.wp-np-stage-lyrics { background: var(--md-surface-container-low); cursor: default; }
+.wp-lyrics { width: 100%; height: 100%; overflow-y: auto; padding: 24px 18px; display: flex; flex-direction: column; gap: 10px; text-align: center; }
+.wp-lyrics-empty { align-items: center; justify-content: center; gap: 12px; }
+.wp-lyric-line { font-size: 17px; line-height: 1.35; color: var(--md-on-surface-variant); transition: color .2s, transform .2s; }
+.wp-lyric-on { color: var(--md-primary); font-weight: 700; transform: scale(1.04); }
+.wp-lyrics-actions { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wp-lyrics-tools { display: flex; justify-content: flex-end; padding-bottom: 2px; }
+
+/* ── Library filter row (#132) ─────────────────────────────────────────────── */
+.wp-filter-row { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 2px 6px; }
+.wp-filter-row .wp-chip { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ── Viz as Now-Playing background (#124) ──────────────────────────────────── */
+/* The visualizer-background variant kept its ambient blur on the wrapper (a live canvas can't be
+   downscaled like a static bg image), so re-declare it here now that the base rule no longer blurs. */
+.wp-np-backdrop-viz { background: var(--md-background); filter: blur(44px) saturate(1.3); transform: scale(1.25); }
+.wp-np-backdrop-viz .wp-viz, .wp-np-backdrop-viz canvas { width: 100%; height: 100%; }
+.wp-tpl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wp-tpl-head .wp-chip { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ── Tone & Effects (EQ screen, #125) ──────────────────────────────────────── */
+.wp-fx { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--md-outline-variant); }
+.wp-fx-label { min-width: 56px; }
+.wp-fx-val { min-width: 48px; text-align: right; }
+
+/* ── Settings inline range (speed) ─────────────────────────────────────────── */
+.wp-set-range { width: 120px; accent-color: var(--md-primary); }
+
+/* ── Tag editor (#130) ─────────────────────────────────────────────────────── */
+.wp-tag-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; padding: 8px 6px; }
+.wp-tag-field { display: flex; flex-direction: column; gap: 3px; }
+.wp-tag-span { grid-column: 1 / -1; }
+.wp-tag-field .wp-search-input { background: var(--md-surface-container-highest); border-radius: var(--md-shape-sm); padding: 9px 12px; }
+
+/* ── Viz post-FX vignette + layer drag-reparent (#114) ─────────────────────── */
+.wp-viz { position: relative; }
+.wp-viz-vignette { position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.9) 130%); }
+.wp-layer-drop { outline: 2px solid var(--md-primary); outline-offset: -2px; background: var(--md-secondary-container); }
+
+/* ── DAW link (#96) ────────────────────────────────────────────────────────── */
+.wp-daw-conn { display: flex; gap: 8px; width: 100%; max-width: 420px; }
+.wp-daw-conn .wp-search-input { flex: 1; background: var(--md-surface-container-high); border-radius: var(--md-shape-full); padding: 0 16px; height: 44px; }
+.wp-link-status { display: inline-flex; align-items: center; gap: 6px; }
+.wp-link-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--md-outline); }
+.wp-link-connected .wp-link-dot, .wp-link-status.wp-link-connected { color: #7ce0a0; }
+.wp-link-connected .wp-link-dot { background: #7ce0a0; }
+.wp-link-connecting .wp-link-dot { background: var(--md-tertiary); animation: wpPulse 1s ease-in-out infinite; }
+.wp-link-error .wp-link-dot { background: var(--md-error); }
+.wp-link-error.wp-link-status { color: var(--md-error); }
+@keyframes wpPulse { 50% { opacity: .3; } }
+.wp-daw-transport { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.wp-daw-note { text-align: center; padding: 8px 16px; }
+
+/* ── Custom accent swatch + density (#134) ─────────────────────────────────── */
+.wp-swatch-custom { padding: 0; border: 2px solid var(--md-outline-variant); background: none; overflow: hidden; }
+.wp-swatch-custom::-webkit-color-swatch-wrapper { padding: 0; }
+.wp-swatch-custom::-webkit-color-swatch { border: none; border-radius: 50%; }
+:root[data-density="compact"] .wp-row { padding: 5px 8px; }
+:root[data-density="compact"] .wp-set-row { padding: 7px 6px; }
+:root[data-density="compact"] .wp-screen { padding: 2px 10px 10px; }
+:root[data-density="compact"] .wp-sheet-item { padding: 11px 10px; }
+
+/* ── Empty-state actions (folder vs files) ─────────────────────────────────── */
+.wp-empty-actions { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+
+/* ── Backup section danger button (#136) ───────────────────────────────────── */
+.wp-btn-danger { background: var(--md-error-container); color: var(--md-on-error-container); }
+
+/* ── Toasts / notifications ─────────────────────────────────────────────────── */
+.wp-toasts {
+  /* Full-width notification strip docked just below the top safe area (status bar). `left/right:0`
+     pins it to the viewport edges and `box-sizing:border-box` keeps the side padding INSIDE, so it
+     spans the full width and can never overflow it. Capped + centered on wide (desktop) windows. */
+  position: fixed; left: 0; right: 0; z-index: 70; display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+  top: calc(8px + env(safe-area-inset-top)); padding: 0 8px; pointer-events: none;
+  max-width: 720px; margin: 0 auto; box-sizing: border-box;
+}
+.wp-toast {
+  pointer-events: auto; display: flex; align-items: center; gap: 10px; width: 100%; max-width: 100%;
+  min-height: 40px; box-sizing: border-box;
+  padding: 10px 16px; border-radius: var(--md-shape-lg); cursor: pointer;
+  background: var(--md-surface-container-high); color: var(--md-on-surface);
+  border: 1px solid var(--md-outline-variant); box-shadow: var(--md-elev-3);
+  animation: wpToastIn .2s var(--md-motion-emphasized);
+}
+.wp-toast > .wp-row-text, .wp-toast-msg { flex: 1; min-width: 0; }
+@keyframes wpToastIn { from { transform: translateY(-12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.wp-toast-icon { display: grid; place-items: center; flex-shrink: 0; }
+.wp-toast-success { background: var(--md-primary); color: var(--md-on-primary); }
+.wp-toast-error { background: var(--md-error-container); color: var(--md-on-error-container); }
+.wp-toast-pct { flex-shrink: 0; font-variant-numeric: tabular-nums; opacity: .85; }
+.wp-toast-spin { animation: wpSpin 1s linear infinite; }
+@keyframes wpSpin { to { transform: rotate(360deg); } }
+.wp-spin { animation: wpSpin 1s linear infinite; }
+.wp-cast-state { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
+  padding: 32px 24px; color: var(--md-on-surface-variant); }
+.wp-cast-state .wp-spin { display: inline-flex; }
+.wp-cast-row { align-items: center; }
+
+/* ── Explore map (zoomable grid of per-algorithm territories) ───────────────── */
+.wp-map {
+  position: relative; flex: 1; min-height: 0; height: 100%; overflow: hidden;
+  touch-action: none; cursor: grab; user-select: none;
+  /* faint dotted "atlas" grid + a soft vignette so the field reads as a map, not a page */
+  background:
+    radial-gradient(120% 100% at 50% -10%, color-mix(in srgb, var(--md-primary) 10%, transparent), transparent 60%),
+    radial-gradient(circle, var(--md-outline-variant) .8px, transparent .8px) 0 0 / 26px 26px,
+    var(--md-surface);
+}
+.wp-map:active { cursor: grabbing; }
+.wp-map-hint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.wp-map-hint .wp-spin { display: inline-flex; }
+/* floating zoom controls (don't pan with the canvas) */
+.wp-map-controls {
+  position: absolute; right: 10px; bottom: 12px; z-index: 5; display: flex; align-items: center; gap: 2px;
+  padding: 2px; border-radius: var(--md-shape-full); background: var(--md-surface-container-high); box-shadow: var(--md-elev-2);
+}
+.wp-map-controls .md-icon-btn { width: 38px; height: 38px; font-size: 12px; font-weight: 600; }
+/* search-to-fly pill */
+.wp-map-search {
+  position: absolute; left: 10px; top: 10px; z-index: 5; display: flex; align-items: center; gap: 6px;
+  max-width: 60%; padding: 6px 8px 6px 12px; border-radius: var(--md-shape-full);
+  background: var(--md-surface-container-high); box-shadow: var(--md-elev-2);
+}
+.wp-map-search-in { border: none; background: none; outline: none; color: var(--md-on-surface); min-width: 0; width: 130px; }
+.wp-map-search .md-icon-btn { width: 28px; height: 28px; }
+/* the pannable + zoomable surface; transform-origin top-left so translate maths stay simple. */
+.wp-map-canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
+/* Feather a decorative layer's four edges to transparent so the container melts into the map's
+   colours instead of stopping at a hard rounded-rect edge. Static mask = composited once, NOT
+   re-rastered on pan/zoom (unlike filter:blur) → safe for the map. */
+@mixin feather-edges($f: 24px) {
+  $stops-x: linear-gradient(to right, transparent, #000 #{$f}, #000 calc(100% - #{$f}), transparent);
+  $stops-y: linear-gradient(to bottom, transparent, #000 #{$f}, #000 calc(100% - #{$f}), transparent);
+  -webkit-mask-image: $stops-x, $stops-y;
+  -webkit-mask-composite: source-in;
+  mask-image: $stops-x, $stops-y;
+  mask-composite: intersect;
+}
+/* base = layout only; the look comes from the style modifiers so territories don't all look alike. */
+.wp-region { position: absolute; width: 300px; height: 236px; overflow: hidden; padding: 8px 10px 10px; border-radius: 26px; display: flex; flex-direction: column; }
+/* ANCHOR — a card whose background is its OWN album art (blurred), so each is a different colour.
+   The hue glow + faint fill + ring live on ::before so they can be feathered into the backdrop. */
+.wp-region-anchor::before, .wp-region-artist::before {
+  content: ""; position: absolute; inset: 0; z-index: 0; border-radius: inherit;
+  background:
+    radial-gradient(130% 80% at 22% 0%, hsl(var(--rh) 70% 58% / .28), transparent 72%),
+    hsl(var(--rh) 40% 50% / .1);
+  box-shadow: inset 0 0 0 1px hsl(var(--rh) 60% 60% / .22);
+  @include feather-edges();
+}
+/* album-art layer (colour from the music) + a scrim. NO blur filter: `filter: blur()` re-rasterises
+   every pan/zoom frame → unusable lag on mobile. We get the soft "blurry" feel cheaply with a low
+   opacity + a strong dark gradient scrim instead (pure compositing, no per-frame raster). */
+.wp-region-bg {
+  position: absolute; inset: 0; z-index: 0; border-radius: inherit;
+  background-size: cover; background-position: center; transform: scale(1.08);
+  opacity: .5;
+  @include feather-edges(28px); // art fades out at the rim → blends into the surrounding colours
+}
+.wp-region-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.62)); }
+/* Customizable blur (Settings → Explore map blur). ONLY applied when on (--map-blur > 0): filter:blur
+   re-rasterises while panning, so it's opt-in. Off (default class absent) = the cheap opacity look. */
+.wp-map-blurred .wp-region-bg { filter: blur(var(--map-blur)) saturate(1.4) brightness(.7); opacity: .7; transform: scale(1.18); }
+/* content above the blurred background */
+.wp-region > .wp-region-head, .wp-region > .wp-region-tiles { position: relative; z-index: 1; }
+/* OPEN — NO card box: just a faint glow behind a labelled cluster of tiles ("not a container") */
+.wp-region-open { background: radial-gradient(115% 65% at 50% 8%, hsl(var(--rh) 70% 58% / .15), transparent 70%); }
+.wp-region-open .wp-region-head { padding-bottom: 6px; }
+/* ARTIST — a rich element: the artist's album art behind (.wp-region-bg) + name + Last.fm tags/bio.
+   Edge ring/fill come from the shared ::before above (feathered). */
+.wp-region-artist .wp-region-head .md-title-s,
+.wp-region-artist .wp-region-bio { color: #fff; }
+.wp-region-info { position: relative; z-index: 1; padding: 0 2px 6px; }
+.wp-region-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
+.wp-region-tag { font-size: 10px; line-height: 1.6; padding: 1px 8px; border-radius: 999px; background: hsl(var(--rh) 60% 55% / .42); color: #fff; }
+.wp-region-bio { color: rgba(255, 255, 255, .8); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.32; }
+/* COMPACT — tiny, box-less: a 2×2 of covers + label */
+.wp-region-compact { background: none; }
+.wp-region-compact .wp-map-label { display: none; }
+.wp-region-head {
+  display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: none;
+  padding: 4px 2px 10px; cursor: pointer; color: inherit; text-align: left;
+}
+.wp-region-head .wp-row-text { flex: 1; min-width: 0; }
+.wp-region-badge {
+  display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex-shrink: 0;
+  border-radius: 50%; background: hsl(var(--rh) 65% 55% / .9); color: #fff; box-shadow: 0 2px 6px hsl(var(--rh) 60% 30% / .5);
+}
+.wp-region-sub { color: hsl(var(--rh) 45% 72%); }
+:root[data-theme="light"] .wp-region-sub { color: hsl(var(--rh) 45% 38%); }
+/* tiles fill the remaining card height; rows split it equally so covers NEVER overflow/clip.
+   Max 2×2 footprint everywhere. */
+/* columns sized to the (square) covers + centred, so a 2×2 sits TIGHT — `1fr` stretched the columns
+   wide and pushed the square covers apart with big whitespace (the "gap" the user disliked). */
+.wp-region-tiles { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(2, auto); grid-auto-rows: minmax(0, 1fr); gap: 5px; justify-content: center; align-content: center; }
+/* anchor = 1 BIG hero (left, full height) + 2 small stacked on the right */
+.wp-region-anchor .wp-region-tiles { grid-template-columns: 1.6fr 1fr; }
+.wp-region-tiles .wp-map-node { min-width: 0; min-height: 0; }
+/* a SQUARE cover sized by the row height (so auto-columns hug it → tight 2×2) — full cover, no crop. */
+.wp-region-tiles .wp-map-art { aspect-ratio: 1; height: 100%; width: auto; max-width: 100%; max-height: 100%; }
+.wp-map-ropes { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
+/* "alive" connectors: vibe-gradient strokes with pulses flowing along them (stroke-dashoffset).
+   --flow is the pulse period — ready to sync to the playing track's BPM later. */
+/* Static gradient ropes — NO stroke-dashoffset animation (it repaints the path every frame → jank
+   while panning). The vibe-gradient + dash pattern still reads as "connected"; BPM-pulse can return
+   later as a GPU-cheap effect. No drop-shadow filter (also a per-frame raster). */
+.wp-rope { fill: none; stroke-linecap: round; }
+.wp-rope-similar { stroke-width: 2; opacity: .45; stroke-dasharray: 3 10; }
+.wp-rope-structural { stroke-width: 3; opacity: .6; stroke-dasharray: 1.5 7; }
+/* hero layout (featured territories): one big tile spanning two rows + small satellites */
+.wp-region-hero .wp-map-hero-tile { grid-column: 1; grid-row: 1 / span 2; }
+/* now-playing pulse on the tile you're hearing */
+.wp-map-playing .wp-map-art { box-shadow: 0 0 0 2.5px var(--md-primary); animation: wpMapPulse 1.6s ease-in-out infinite; }
+@keyframes wpMapPulse { 0%, 100% { box-shadow: 0 0 0 2.5px var(--md-primary), 0 0 4px var(--md-primary); } 50% { box-shadow: 0 0 0 2.5px var(--md-primary), 0 0 12px var(--md-primary); } }
+/* LOOSE spotlight tile — a free-floating cover, NO container card. Sits inside its grid cell. */
+.wp-loose {
+  position: absolute; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  background: none; border: none; padding: 0; cursor: pointer; transition: transform .12s ease;
+}
+.wp-loose:active { transform: scale(.93); }
+.wp-loose-art { display: block; box-shadow: 0 6px 16px hsl(var(--rh) 45% 18% / .55); }
+.wp-loose-art .wp-cover { width: 100% !important; height: 100% !important; border-radius: 0 !important; background: hsl(var(--rh) 35% 42% / .4); }
+.wp-loose-label { text-align: center; font-weight: 600; color: var(--md-on-surface); }
+/* level-of-detail: zoomed out, a territory is just a glowing label chip (covers don't render) */
+.wp-region-lod { height: auto; min-height: 0; padding: 14px 16px; display: flex; align-items: center; }
+.wp-region-lod .wp-region-head { padding: 0; }
+.wp-region-lod .md-title-s { font-size: 1.05rem; }
+.wp-map-node {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: none; border: none; padding: 0; cursor: pointer; min-width: 0; transition: transform .12s ease;
+}
+.wp-map-node:active { transform: scale(.92); }
+/* box-shadow (NOT filter:drop-shadow) — tiles are rounded squares now, so a box-shadow tracks them
+   and is GPU-composited; drop-shadow re-rastered every cover on every pan frame (the lag). */
+.wp-map-art { display: block; width: 84px; height: 84px; box-shadow: 0 3px 8px rgba(0, 0, 0, .4); }
+.wp-map-art .wp-cover { width: 100% !important; height: 100% !important; border-radius: 0 !important; background: hsl(var(--rh) 30% 40% / .35); }
+.wp-map-label { max-width: 90px; text-align: center; color: var(--md-on-surface-variant); }
+/* Bluetooth device row in Settings → Connect (tap opens the preset picker). */
+.wp-bt-row { width: 100%; background: none; border: none; text-align: left; cursor: pointer; }
+.wp-bt-row .wp-set-control { display: inline-flex; align-items: center; gap: 4px; color: var(--md-on-surface-variant); }
+/* Pinned so the Look subtabs stay reachable while the section scrolls under them. */
+.wp-set-subtabs { position: sticky; top: 0; z-index: 3; margin: 0 0 12px; padding: 6px 0;
+  background: var(--md-surface); }
+/* "Restore defaults" is a FIXED bar pinned to the bottom of the settings scroller — above the
+   mini-player + nav — so it's always reachable while the section content scrolls beneath it. */
+.wp-set-restore {
+  /* flows at the bottom of each section's content (NOT sticky/floating) */
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; margin: 14px 0 2px; padding: 10px; color: var(--md-on-surface-variant);
+  background: color-mix(in srgb, var(--md-surface-container-high) 88%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3);
+  border: 1px solid color-mix(in srgb, var(--md-outline-variant) 70%, transparent);
+  border-radius: var(--md-shape-full); box-shadow: 0 6px 20px rgba(0,0,0,.3);
+}
+
+/* ── Selection mode (hold-to-select + delete) ──────────────────────────────── */
+.wp-select-bar {
+  display: flex; align-items: center; gap: 8px; height: 48px; margin: 4px 0 8px; padding: 0 8px;
+  background: var(--md-secondary-container); color: var(--md-on-secondary-container); border-radius: var(--md-shape-full);
+}
+.wp-select-count { flex: 1; }
+.wp-select-del { color: var(--md-error); }
+.wp-row-checked {
+  background: color-mix(in srgb, var(--md-primary) 16%, transparent);
+  border-radius: var(--md-shape-lg);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--md-primary) 55%, transparent);
+}
+.wp-check { width: 44px; height: 44px; display: grid; place-items: center; flex-shrink: 0; }
+
+/* Selection cover: art stays, check badge overlays; art dips when picked. */
+.wp-sel-cover { position: relative; flex-shrink: 0; display: block; }
+.wp-sel-cover > :first-child { width: 100%; height: 100%; display: block; transition: transform .16s cubic-bezier(.2,.9,.2,1); border-radius: var(--md-shape-sm); overflow: hidden; }
+.wp-sel-cover.on > :first-child { transform: scale(.74); }
+.wp-sel-badge {
+  position: absolute; right: -3px; bottom: -3px; width: 21px; height: 21px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--md-surface-container-highest);
+  box-shadow: 0 0 0 2px var(--md-background), inset 0 0 0 1.5px var(--md-outline);
+  transition: background .14s ease, box-shadow .14s ease;
+}
+.wp-sel-cover.on .wp-sel-badge { background: var(--md-primary); box-shadow: 0 0 0 2px var(--md-background); }
+.wp-tile { position: relative; }
+.wp-tile-checked { outline: 2px solid var(--md-primary); outline-offset: -2px; border-radius: var(--md-shape-md); }
+.wp-tile-check { position: absolute; top: 6px; right: 6px; background: var(--md-surface); border-radius: 50%; display: grid; place-items: center; }
+
+/* ── Confirm dialog (rounded-rectangle "are you sure?") ────────────────────── */
+.wp-dialog-backdrop {
+  position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 24px;
+  background: color-mix(in srgb, var(--md-scrim) 55%, transparent); animation: wpFade .14s ease;
+}
+.wp-dialog {
+  width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 8px; text-align: center;
+  background: var(--md-surface-container-high); color: var(--md-on-surface);
+  border-radius: var(--md-shape-xl); padding: 22px 22px 16px; box-shadow: var(--md-elev-3);
+  animation: wpToastIn .18s var(--md-motion-emphasized);
+}
+.wp-dialog-icon { display: grid; place-items: center; margin-bottom: 2px; }
+.wp-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+/* ── Material You toggle disables manual swatches ──────────────────────────── */
+.wp-swatches.wp-disabled { opacity: .4; pointer-events: none; }
+
+/* ── For You / taste Home view ─────────────────────────────────────────────── */
+.wp-np-time-right { cursor: pointer; user-select: none; -webkit-user-select: none; }
+
+/* Cursor-anchored popup menu (e.g. click an artist name) */
+.wp-cursorpop-scrim { position: fixed; inset: 0; z-index: 60; }
+.wp-cursorpop {
+  position: fixed; z-index: 61; min-width: 190px; padding: 4px;
+  background: var(--md-surface-container-high); border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md); box-shadow: var(--md-elev-3); display: flex; flex-direction: column;
+}
+.wp-cursorpop-title { padding: 6px 10px 4px; color: var(--md-on-surface-variant); }
+.wp-cursorpop-item {
+  display: flex; align-items: center; gap: 8px; text-align: left; padding: 8px 10px; font: inherit;
+  background: none; border: none; color: var(--md-on-surface); cursor: pointer; border-radius: var(--md-shape-sm);
+}
+.wp-cursorpop-item:hover { background: var(--md-surface-container-highest); }
+
+/* Settings → Connect → Open stream URL */
+.wp-stream-open { display: flex; flex-direction: column; gap: 8px; padding: 2px; }
+.wp-stream-open .wp-search-input { width: 100%; }
+
+/* Library-tabs reorder editor (Settings → Library) */
+.wp-libtabs-edit { display: flex; flex-direction: column; gap: 2px; padding: 2px; }
+.wp-libtab-row { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: var(--md-shape-md); }
+.wp-libtab-row:hover { background: var(--md-surface-container-high); }
+
+/* Internet-radio browser */
+.wp-radio-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; padding: 4px 2px; }
+.wp-radio-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px; border: none; background: none; cursor: pointer;
+  color: inherit; text-align: left; border-radius: var(--md-shape-md);
+}
+.wp-radio-row:hover { background: var(--md-surface-container-high); }
+.wp-radio-ico {
+  width: 38px; height: 38px; flex-shrink: 0; border-radius: var(--md-shape-sm); overflow: hidden;
+  display: grid; place-items: center; background: var(--md-surface-container-high); color: var(--md-on-surface-variant);
+}
+.wp-radio-ico img { width: 100%; height: 100%; object-fit: cover; }
+.wp-radio-meta { flex: 1; min-width: 0; }
+
+/* Edit-tags header actions (auto-fill + link to auto-tag settings), pushed to the right of the title */
+.wp-tag-head-actions { margin-left: auto; display: flex; gap: 2px; }
+
+/* Cover-picker grid (Edit tags → Change cover): candidates with their pixel size */
+.wp-cover-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; padding: 8px 6px; overflow-y: auto; }
+.wp-cover-cand {
+  position: relative; aspect-ratio: 1; border: none; padding: 0; cursor: pointer; border-radius: var(--md-shape-md);
+  overflow: hidden; background: var(--md-surface-container-high); box-shadow: var(--md-elev-1);
+}
+.wp-cover-cand img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wp-cover-cand:hover { outline: 2px solid var(--md-primary); outline-offset: -2px; }
+.wp-cover-cand[disabled] { opacity: .5; cursor: default; }
+.wp-cover-q {
+  position: absolute; left: 4px; bottom: 4px; padding: 1px 6px; border-radius: var(--md-shape-full);
+  background: rgba(0,0,0,.6); color: #fff; backdrop-filter: blur(4px);
+}
+.wp-tonal-btn {
+  display: inline-flex; align-items: center; gap: 6px; border: none; cursor: pointer;
+  padding: 8px 14px; border-radius: var(--md-shape-full); font: inherit; font-weight: 600;
+  background: var(--md-surface-container-high); color: var(--md-on-surface);
+}
+.wp-tonal-btn:hover { background: var(--md-surface-container-highest); }
+.wp-tonal-btn.wp-btn-sm { padding: 5px 10px; font-size: 12px; }
+
+.wp-home { padding-bottom: 96px; }
+.wp-home-hero {
+  display: flex; align-items: center; gap: 12px; padding: 6px 4px 10px;
+}
+.wp-home-hero .wp-row-text { flex: 1; min-width: 0; }
+.wp-home-hero > .md-title-m { flex: 1; min-width: 0; }
+.wp-home-hero-actions { display: flex; align-items: center; gap: 6px; }
+/* Discovery control: compact segmented pills (with icons) + a one-line caption of the active mode */
+.wp-discovery { margin-bottom: 10px; }
+.wp-discovery .wp-explore-seg { margin: 0 2px 4px; }
+.wp-discovery .wp-seg-item { display: inline-flex; align-items: center; gap: 5px; }
+.wp-discovery-cap { padding: 0 8px; }
+.wp-foryou-banner {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 12px 14px; margin: 0 0 12px; cursor: pointer;
+  background: var(--md-surface-container-high); border: 1px solid var(--md-outline-variant);
+  border-radius: 16px; color: inherit;
+}
+.wp-foryou-banner .wp-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.wp-foryou-banner:active { background: var(--md-surface-container-highest); }
+
+/* ── Vibe search (For You) ───────────────────────────────────────────── */
+.wp-vibe { display: flex; flex-direction: column; gap: 10px; margin: 2px 0 14px; }
+.wp-vibe-bar {
+  display: flex; align-items: center; gap: 8px; padding: 0 12px; height: 46px;
+  background: var(--md-surface-container-high); border: 1px solid var(--md-outline-variant);
+  border-radius: 23px;
+}
+.wp-vibe-input {
+  flex: 1; min-width: 0; background: none; border: none; outline: none;
+  color: var(--md-on-surface); font-size: 14px;
+}
+.wp-vibe-input::placeholder { color: var(--md-on-surface-variant); }
+.wp-vibe-clear { width: 28px; height: 28px; }
+.wp-vibe-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.wp-vibe-chip {
+  padding: 6px 13px; border-radius: 16px; font-size: 12.5px; cursor: pointer;
+  background: var(--md-surface-container-high); color: var(--md-on-surface-variant);
+  border: 1px solid var(--md-outline-variant); transition: background .12s, color .12s;
+}
+.wp-vibe-chip:hover { background: var(--md-primary); color: var(--md-on-primary); border-color: transparent; }
+.wp-vibe-results {
+  background: var(--md-surface-container); border: 1px solid var(--md-outline-variant);
+  border-radius: 16px; overflow: hidden;
+}
+.wp-vibe-rhead {
+  display: flex; align-items: center; gap: 10px; padding: 11px 14px;
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.wp-vibe-rhead .wp-row-text { flex: 1; min-width: 0; }
+.wp-vibe-ractions { display: flex; align-items: center; gap: 4px; }
+.wp-vibe-list { max-height: 46vh; overflow-y: auto; }
+.wp-vibe-row {
+  display: flex; align-items: center; gap: 11px; width: 100%; padding: 7px 14px;
+  background: none; border: none; cursor: pointer; text-align: left;
+}
+.wp-vibe-row:hover { background: var(--md-surface-container-high); }
+.wp-vibe-row .wp-row-text { flex: 1; min-width: 0; }
+
+.wp-home-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center;
+  max-width: 420px; margin: 48px auto; color: var(--md-on-surface-variant);
+}
+.wp-home-empty .md-title-m, .wp-home-empty .md-title-s { color: var(--md-on-surface); }
+.wp-home-empty .wp-filled-btn { margin-top: 6px; }
+
+/* content-visibility: the browser skips layout/paint (and cover-image work) for shelves that are
+   off-screen, then renders them as they scroll near — huge win on the long For-You page with many
+   horizontal rows. `auto` intrinsic size = it remembers each shelf's real height after first paint. */
+.wp-shelf { margin: 10px 0 4px; content-visibility: auto; contain-intrinsic-size: auto 260px; }
+.wp-shelf-more {
+  margin-left: auto; background: none; border: none; cursor: pointer; color: var(--md-primary);
+  display: inline-flex; align-items: center; gap: 2px; font-weight: 600; padding: 4px 2px;
+}
+
+/* Feature introduction (first launch + Settings → About) */
+.wp-intro {
+  position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center;
+  padding: 16px; box-sizing: border-box;
+  padding-top: calc(16px + env(safe-area-inset-top)); padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  /* Opaque scrim (no backdrop-filter): blurring the heavy Home page live re-blurs on every repaint
+     underneath — expensive enough to stall on weaker devices. A solid scrim is cheap + fully covers. */
+  background: rgba(8, 8, 10, 0.9);
+}
+.wp-intro-card {
+  width: min(440px, 100%); max-height: 100%; box-sizing: border-box;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--md-surface-container-high); border: 1px solid var(--md-outline-variant);
+  border-radius: 28px; padding: 8px 8px 14px; box-shadow: var(--md-elev-3);
+  animation: wpSlideUp .26s var(--md-motion-emphasized) both;
+}
+.wp-intro-viewport { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.wp-intro-track { display: flex; height: 100%; transition: transform .3s var(--md-motion-emphasized); will-change: transform; }
+.wp-intro-slide {
+  flex: 0 0 100%; box-sizing: border-box; overflow-y: auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; gap: 12px; padding: 24px 22px 12px;
+}
+.wp-intro-mark { width: 56px; height: 56px; border-radius: 18px; display: grid; place-items: center; background: var(--md-primary); flex-shrink: 0; }
+/* Single-card TabIntro bullet list (Explore / For You first-visit) */
+.wp-intro-points { list-style: none; margin: 2px 14px 6px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.wp-intro-point { display: flex; align-items: center; gap: 10px; }
+.wp-intro-point-ic { width: 28px; height: 28px; border-radius: 9px; flex-shrink: 0; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--md-primary) 16%, transparent); }
+.wp-intro-dots { display: flex; justify-content: center; gap: 6px; padding: 8px 0; flex-shrink: 0; }
+.wp-intro-dots .wp-qg-dot { border: none; padding: 0; cursor: pointer; }
+.wp-intro-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 14px; min-height: 40px; flex-shrink: 0; }
+.wp-intro-actions .wp-filled-btn { display: inline-flex; align-items: center; gap: 4px; }
+/* short / landscape screens: tighten so the whole card fits without scrolling */
+@media (max-height: 520px) {
+  .wp-intro-slide { padding: 14px 18px 8px; gap: 8px; }
+  .wp-intro-mark { width: 42px; height: 42px; border-radius: 14px; }
+  .wp-intro-slide .md-headline-s { font-size: 19px; }
+}
+
+/* "See all" full-screen list overlay */
+.wp-seeall {
+  position: fixed; inset: 0; z-index: 60; background: var(--md-surface); display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top); animation: wpSlideUp .22s var(--md-motion-standard) both;
+}
+.wp-seeall-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--md-outline-variant); }
+.wp-seeall-head .wp-row-text { flex: 1; min-width: 0; }
+.wp-seeall-list { flex: 1; overflow-y: auto; padding: 6px 8px calc(12px + env(safe-area-inset-bottom)); }
+.wp-seeall-list .wp-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 7px 8px; border: none; background: none; color: inherit; text-align: left; cursor: pointer; border-radius: var(--md-shape-md); }
+.wp-seeall-list .wp-row:active { background: var(--md-surface-container-high); }
+.wp-seeall-list .wp-row .wp-row-text { flex: 1; min-width: 0; }
+
+/* ── Quick picks: horizontally-paged 3×3 grid you swipe between, with page dots (YT "Kurzwahl") ── */
+.wp-qg {
+  display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.wp-qg::-webkit-scrollbar { display: none; }
+.wp-qg-page {
+  flex: 0 0 100%; box-sizing: border-box; scroll-snap-align: start;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 2px;
+}
+.wp-qg-tile {
+  display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 0;
+  border: none; background: none; color: inherit; text-align: left; cursor: pointer;
+}
+.wp-qg-art {
+  width: 100%; aspect-ratio: 1; border-radius: var(--md-shape-md); overflow: hidden;
+  background: var(--md-surface-container-high); display: grid; place-items: center; color: var(--md-on-surface-variant);
+}
+.wp-qg-art img { width: 100%; height: 100%; object-fit: cover; }
+.wp-qg-tile:active .wp-qg-art { transform: scale(.97); }
+.wp-qg-label { font-size: 12px; }
+.wp-qg-dots { display: flex; justify-content: center; gap: 6px; padding: 10px 0 2px; }
+.wp-qg-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--md-outline-variant); transition: width .2s, background .2s; }
+.wp-qg-dot.on { width: 18px; border-radius: 3px; background: var(--md-primary); }
+
+/* ── Featured mix card: mosaic header + a few rows + play (YT-Music "Empfohlene Mixe") ── */
+.wp-feature {
+  background: var(--md-surface-container-high); border: 1px solid var(--md-outline-variant);
+  border-radius: 20px; padding: 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.wp-feature-head { display: flex; align-items: center; gap: 12px; }
+.wp-feature-head .wp-mosaic { width: 72px; height: 72px; flex-shrink: 0; }
+.wp-feature-head .wp-row-text { flex: 1; min-width: 0; }
+.wp-feature-row {
+  display: flex; align-items: center; gap: 10px; padding: 5px 4px; border: none; background: none;
+  color: inherit; text-align: left; cursor: pointer; border-radius: var(--md-shape-sm);
+}
+.wp-feature-row:active { background: var(--md-surface-container-highest); }
+.wp-feature-row .wp-mc { width: 40px; height: 40px; flex-shrink: 0; border-radius: var(--md-shape-sm); overflow: hidden; }
+.wp-feature-row .wp-row-text { flex: 1; min-width: 0; }
+.wp-feature-actions { display: flex; gap: 10px; padding-top: 2px; }
+.wp-feature-play {
+  width: 46px; height: 46px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--md-primary); display: grid; place-items: center;
+}
+.wp-feature-flow {
+  width: 46px; height: 46px; border-radius: 50%; cursor: pointer; display: grid; place-items: center;
+  background: transparent; border: 1px solid var(--md-outline-variant); color: var(--md-on-surface);
+}
+.wp-feature-flow:active { background: var(--md-surface-container-highest); }
+.wp-shelf-head { display: flex; align-items: baseline; gap: 8px; padding: 0 4px 8px; }
+.wp-shelf-head h3 { margin: 0; }
+.wp-shelf-row {
+  display: flex; gap: 12px; overflow-x: auto; overflow-y: hidden; padding: 2px 4px 8px;
+  scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch;
+}
+.wp-shelf-row::-webkit-scrollbar { height: 6px; }
+.wp-shelf-row::-webkit-scrollbar-thumb { background: var(--md-surface-container-highest); border-radius: 3px; }
+
+.wp-mixcard {
+  flex: 0 0 auto; width: 164px; scroll-snap-align: start; cursor: pointer;
+  display: flex; flex-direction: column; gap: 8px; padding: 0; border: none; background: none;
+  text-align: left; color: inherit;
+}
+.wp-mixcard-art {
+  position: relative; width: 164px; height: 164px; border-radius: var(--md-shape-lg);
+  overflow: hidden; background: var(--md-surface-container-high);
+}
+
+/* For You discovery toggle (Familiar / Balanced / Discover) — reuses the segmented-control look */
+.wp-explore-seg { display: inline-flex; gap: 2px; padding: 3px; margin: 0 2px 12px; border-radius: 999px;
+  background: var(--md-surface-container-high); border: 1px solid var(--md-outline-variant); }
+.wp-explore-seg .wp-seg-item { padding: 7px 16px; border-radius: 999px; border: none; background: none;
+  color: var(--md-on-surface-variant); font-weight: 600; font-size: 13px; cursor: pointer; }
+.wp-explore-seg .wp-seg-on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+
+/* Mood/genre quick-launch chips */
+.wp-chips-row {
+  display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 12px; scrollbar-width: none;
+  scroll-snap-type: x proximity;
+}
+.wp-chips-row::-webkit-scrollbar { display: none; }
+.wp-chip-pill {
+  flex: 0 0 auto; padding: 8px 16px; border-radius: 999px; cursor: pointer; white-space: nowrap;
+  background: var(--md-surface-container-high); border: 1px solid var(--md-outline-variant);
+  color: var(--md-on-surface); font-weight: 600; font-size: 13px; scroll-snap-align: start;
+}
+.wp-chip-pill:active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.wp-mixcard-art > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wp-mixcard-art > .wp-mc { width: 100%; height: 100%; }
+/* Sound-DNA "vibe" glyph fills the card art (its inline canvas size can't track a responsive tile). */
+.wp-mixcard-art > .wp-dna, .wp-qg-art > .wp-dna, .wp-mc > .wp-dna { width: 100% !important; height: 100% !important; }
+.wp-mixcard-play {
+  position: absolute; right: 8px; bottom: 8px; width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--md-primary); box-shadow: var(--md-elev-2);
+  opacity: 0; transform: translateY(6px) scale(.9); transition: opacity .15s, transform .15s;
+}
+.wp-mixcard:hover .wp-mixcard-play, .wp-mixcard:focus-visible .wp-mixcard-play { opacity: 1; transform: none; }
+/* Touch devices have no hover → keep the play button visible so cards are tappable-to-play. */
+@include coarse { .wp-mixcard-play { opacity: 1; transform: none; } }
+.wp-mixcard-meta { display: flex; flex-direction: column; gap: 1px; padding: 0 2px; }
+.wp-mixcard-title { color: var(--md-on-surface); font-weight: 600; }
+
+/* station / recipe cards: a tinted gradient tile instead of a photo mosaic */
+.wp-station-art, .wp-recipe-art {
+  display: grid; place-items: center;
+  background: linear-gradient(150deg, var(--md-primary), var(--md-surface-container-low));
+}
+.wp-recipe-art { background: linear-gradient(150deg, var(--md-tertiary, var(--md-primary)), var(--md-surface-container-low)); }
+
+/* 2×2 album-art mosaic */
+.wp-mosaic { width: 100%; height: 100%; display: grid; grid-template: 1fr 1fr / 1fr 1fr; gap: 1px; }
+.wp-mc { background: var(--md-surface-container); display: grid; place-items: center; overflow: hidden; color: var(--md-on-surface-variant); }
+.wp-mc img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ── App-wide blurred album-art background (Settings → Appearance) ─────────── */
+:root[data-appbg="blur"] .wp-app { background: transparent; position: relative; isolation: isolate; }
+/* On the PLAYER the screen draws its own full-window blurred backdrop, so the app shell must be transparent
+   (even when the blurred-art app background is OFF) — otherwise the solid base paints BLACK behind/around
+   the floating tab dock. */
+:root[data-tab="playing"] .wp-app { background: transparent; }
+/* In blur mode let the album art read THROUGH the floating tab bar (and mini-player) — thinner
+   surface tint + stronger blur = frosted glass over the art, not a solid block. Labels stay legible
+   on the blurred+darkened layer. The system nav bar below is handled natively (contrast scrim off). */
+:root[data-appbg="blur"] .wp-nav {
+  /* base is already transparent + carries its own art tint; just blur a touch harder in blur mode */
+  -webkit-backdrop-filter: blur(26px) saturate(1.6); backdrop-filter: blur(26px) saturate(1.6);
+}
+:root[data-appbg="blur"] .wp-mini {
+  background: color-mix(in srgb, var(--md-surface-container-high) 56%, transparent);
+}
+/* fixed = full viewport, so the blurred art bg extends under the transparent status & nav bars */
+.wp-appbg { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.wp-appbg-img {
+  /* Perf: a full-viewport filter:blur(64px) re-rasterizes a huge surface (and re-composites on webkit2gtk
+     every time the list scrolls / a cover loads → ~20fps). Instead blur a DOWNSCALED layer (~34%) and
+     scale it back up 3.4× — the blur kernel runs on ~11× fewer pixels. The box is viewport-aspect (34% of
+     each axis) so `cover` crops correctly (no stretch); scaled 3.4× it overscans the viewport (no black). */
+  position: absolute; top: 50%; left: 50%; width: 34%; height: 34%;
+  background-size: cover; background-position: center;
+  filter: blur(calc(var(--wp-bg-blur, 64px) / 3.4)) saturate(var(--wp-bg-sat, 1.5));
+  transform: translate(-50%, -50%) scale(3.4); transform-origin: center; will-change: transform;
+}
+/* Scrim sits between the blurred art and the (transparent) content. It MUST match the theme: a dark
+   scrim under light text in dark mode, a light scrim under dark text in light mode. Without the light
+   override, light-mode dark text landed on a dark/black blurred cover → unreadable. */
+/* Fully transparent — no contrast wash over the blurred album art at all (the dimmed rectangle behind the
+   floating tab dock is gone). Kept in the DOM so toggling it back later is a one-line change. */
+.wp-appbg-scrim { position: absolute; inset: 0; background: transparent; }
+:root[data-theme="light"] .wp-appbg-scrim { background: transparent; }
+/* On the player, this full-window backdrop fills the strip behind the floating nav (the player's own
+   backdrop is clipped to the content area). Match the player backdrop's blur/saturation EXACTLY so the
+   two are one seamless image — no darker, blurrier band under the dock. */
+:root[data-tab="playing"] .wp-appbg-img { filter: blur(calc(44px / 3.4)) saturate(1.3); }
+/* …and DROP the player's own (clipped) blurred backdrop entirely — the webview clips its position:fixed to
+   the content box, leaving a seam/dark band under the dock. The full-window app backdrop above is the
+   single, continuous source of the blurred art now. (The visualizer backdrop variant stays.) */
+:root[data-tab="playing"] .wp-np-backdrop:not(.wp-np-backdrop-viz) { display: none; }
+
+/* ── Waveform seek bar (Poweramp-style) ───────────────────────────────────── */
+.wp-wave { position: relative; width: 100%; cursor: pointer; touch-action: none; }
+.wp-wave-layer { position: absolute; inset: 0; display: flex; align-items: center; gap: 2px; pointer-events: none; }
+.wp-wave-dim .wp-wave-bar { background: var(--md-surface-container-highest); opacity: .5; }
+.wp-wave-lit .wp-wave-bar { background: var(--md-primary); opacity: 1; }
+/* coloured layer revealed up to the playhead — transitions so the stripes gain colour SMOOTHLY with time */
+.wp-wave-lit { clip-path: inset(0 100% 0 0); transition: clip-path .2s linear; will-change: clip-path; }
+.wp-songseek { position: relative; width: 100%; cursor: pointer; touch-action: none; }
+/* hold-to-loop: the looping bar lights up + pulses on the grid */
+.wp-seek-loop {
+  position: absolute; top: 0; bottom: 0; pointer-events: none; border-radius: 4px;
+  background: color-mix(in srgb, var(--md-primary) 22%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--md-primary) 70%, transparent);
+  animation: wpSeekLoopPulse 0.5s ease-in-out infinite alternate;
+}
+@keyframes wpSeekLoopPulse { from { opacity: 0.65; } to { opacity: 1; } }
+.wp-songseek-looping { cursor: grabbing; }
+.wp-seek-label {
+  position: absolute; top: -24px; transform: translateX(-50%); pointer-events: none; white-space: nowrap;
+  background: var(--md-surface-container-highest); color: var(--md-on-surface);
+  padding: 2px 9px; border-radius: var(--md-shape-full); box-shadow: var(--md-elev-2); font-weight: 600;
+}
+.wp-np-bpm { color: var(--md-primary); font-weight: 600; letter-spacing: .3px; }
+.wp-np-key { color: var(--md-on-surface-variant); font-weight: 600; letter-spacing: .3px; padding: 1px 7px; border-radius: var(--md-shape-full); background: color-mix(in srgb, var(--md-secondary-container) 70%, transparent); }
+.wp-np-genre { color: var(--md-on-surface-variant); font-weight: 600; letter-spacing: .2px; padding: 1px 7px; border-radius: var(--md-shape-full); background: color-mix(in srgb, var(--md-tertiary-container, var(--md-surface-container-highest)) 70%, transparent); max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-np-endless { display: inline-flex; align-items: center; gap: 2px; color: var(--md-primary); font-weight: 700; letter-spacing: .2px; padding: 1px 7px; border-radius: var(--md-shape-full); background: color-mix(in srgb, var(--md-primary) 16%, transparent); }
+.wp-np-endless svg { margin-right: 1px; }
+.wp-wave-bar { flex: 1 1 0; min-width: 2px; border-radius: 2px; } /* colour set by the dim/lit layer */
+
+/* Android-12-style "squiggly" progress */
+.wp-squig { width: 100%; cursor: pointer; touch-action: none; }
+.wp-squig svg { display: block; width: 100%; overflow: visible; }
+.wp-squig-rest { stroke: color-mix(in srgb, var(--md-on-surface) 24%, transparent); stroke-width: 3; stroke-linecap: round; }
+.wp-squig-played { stroke: var(--md-primary); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.wp-squig-thumb { fill: var(--md-primary); }
+
+/* ── Settings sub-tab strip ───────────────────────────────────────────────── */
+.wp-subtabs {
+  display: flex; gap: 6px; overflow-x: auto; padding: 4px 2px 10px; margin-bottom: 2px;
+  position: sticky; top: 0; z-index: 2; background: var(--md-background);
+  scrollbar-width: none;
+}
+.wp-subtabs::-webkit-scrollbar { display: none; }
+.wp-subtab {
+  flex: 0 0 auto; border: none; cursor: pointer; padding: 7px 14px; border-radius: var(--md-shape-full);
+  font: inherit; font-weight: 600; font-size: 13px;
+  background: var(--md-surface-container-high); color: var(--md-on-surface-variant);
+}
+.wp-subtab-on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+:root[data-appbg="blur"] .wp-subtabs { background: transparent; }
+
+/* ── Settings: root list-menu (simple buttons that drill into each sub-page) ── */
+.wp-set-menu { display: flex; flex-direction: column; gap: 6px; padding: 6px 0 12px; }
+.wp-set-menu-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; cursor: pointer;
+  padding: 13px 12px; border: none; border-radius: var(--md-shape-md);
+  background: var(--md-surface-container-low); color: inherit;
+}
+.wp-set-menu-row:hover { background: var(--md-surface-container); }
+.wp-set-menu-row .wp-row-text { flex: 1; min-width: 0; }
+
+/* Changelog — fills the empty space below the settings menu rows */
+.wp-changelog { margin-top: 10px; padding: 14px; border-radius: var(--md-shape-lg); background: var(--md-surface-container-low); display: flex; flex-direction: column; gap: 12px; }
+.wp-changelog-head { letter-spacing: 1.4px; }
+.wp-cl-entry { display: flex; flex-direction: column; gap: 4px; }
+.wp-cl-ver { display: flex; align-items: baseline; gap: 8px; }
+.wp-cl-ver .md-label-l { color: var(--md-primary); }
+.wp-cl-notes { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
+.wp-cl-notes li { color: var(--md-on-surface-variant); }
+.wp-cl-notes li::marker { color: var(--md-outline); }
+/* "What's new" launch popup body */
+.wp-whatsnew { display: flex; flex-direction: column; gap: 14px; padding: 6px 4px 4px; max-height: 56vh; overflow-y: auto; }
+.wp-whatsnew-ok { justify-content: center; margin: 8px 4px 2px; }
+.wp-cl-foot { padding-top: 2px; border-top: 1px solid var(--md-outline-variant); }
+.wp-set-back {
+  display: flex; align-items: center; gap: 8px; padding: 2px 0 10px;
+  position: sticky; top: 0; z-index: 2; background: var(--md-background);
+}
+:root[data-appbg="blur"] .wp-set-back { background: transparent; }
+
+/* ── First-boot personalization ───────────────────────────────────────────── */
+.wp-onboard {
+  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 18px;
+  background: rgba(0,0,0,.62); backdrop-filter: blur(4px);
+}
+.wp-onboard-card {
+  width: 100%; max-width: 460px; max-height: 92dvh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 16px; padding: 22px;
+  background: var(--md-surface-container-high); color: var(--md-on-surface);
+  border-radius: var(--md-shape-xl); box-shadow: var(--md-elev-3);
+  animation: wpToastIn .22s var(--md-motion-emphasized);
+}
+.wp-onboard-head { display: flex; flex-direction: column; gap: 4px; text-align: center; align-items: center; }
+.wp-onboard-mark { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--md-shape-md); background: var(--md-primary); margin-bottom: 4px; }
+.wp-onboard-preview {
+  position: relative; height: 168px; border-radius: var(--md-shape-lg); overflow: hidden;
+  background: var(--md-surface-container);
+}
+.wp-onboard-prev-img {
+  position: absolute; inset: -16%; background-size: cover; background-position: center; transform: scale(1.1);
+}
+.wp-onboard-preview-demo .wp-onboard-prev-img {
+  background-image: conic-gradient(from 30deg, #ff5e62, #ff9966, #6a82fb, #43e97b, #f857a6, #ff5e62);
+}
+.wp-onboard-prev-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.25), rgba(0,0,0,.7)); }
+.wp-onboard-prev-fg { position: absolute; left: 16px; bottom: 14px; color: #fff; text-shadow: 0 1px 6px rgba(0,0,0,.6); }
+.wp-onboard-rows { display: flex; flex-direction: column; gap: 12px; }
+.wp-onboard-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.wp-onboard-row.wp-disabled { opacity: .4; pointer-events: none; }
+.wp-onboard-slider { flex: 0 0 150px; }
+.wp-onboard-done { align-self: stretch; justify-content: center; padding: 12px; font-size: 15px; }
+
+/* ── Parametric EQ (Poweramp-style) ───────────────────────────────────────── */
+.wp-eqp { display: flex; flex-direction: column; gap: 10px; height: 100%; overflow: hidden; padding: 8px 10px 12px; }
+.wp-eqp .wp-dim { opacity: .45; }
+
+.wp-eq-stage { flex: 1 1 auto; min-height: 0; display: flex; }
+/* Bands mode = a column: selected-band editor on top, the fader bank (fitted to width) below. */
+.wp-eq-equ { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.wp-eq-selbar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 6px 10px;
+  border-radius: var(--md-shape-md); background: var(--md-surface-container);
+}
+.wp-eq-selinfo { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+/* ALL bands fit the width — no horizontal scroll. Each band flexes; the fader track stays centered. */
+.wp-eq-bands { display: flex; gap: 2px; width: 100%; flex: 1 1 auto; min-height: 0; align-items: stretch; padding: 2px 0 4px; }
+.wp-eq-band {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 6px 2px; border-radius: var(--md-shape-sm); background: var(--md-surface-container);
+}
+.wp-eq-band.wp-eq-sel { background: var(--md-surface-container-high); outline: 1.5px solid var(--md-primary); }
+.wp-eq-pre { background: var(--md-surface-container-low); }
+.wp-eq-bname { color: var(--md-on-surface-variant); font-size: 10px; }
+.wp-eq-bval { font-variant-numeric: tabular-nums; color: var(--md-on-surface); font-size: 11px; }
+/* dB scale gutter aligned to the fader tracks */
+.wp-eq-scale { flex: 0 0 auto; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end; padding: 6px 4px 24px 2px; color: var(--md-on-surface-variant); }
+
+.wp-eqf-track {
+  position: relative; width: 11px; flex: 1 1 auto; min-height: 80px; border-radius: var(--md-shape-full);
+  background: var(--md-surface-container-highest); cursor: ns-resize; touch-action: none;
+}
+.wp-eqf-fill { position: absolute; left: 0; right: 0; bottom: 0; border-radius: inherit; }
+.wp-eqf-thumb { position: absolute; left: 50%; width: 16px; height: 16px; border-radius: 50%; transform: translateX(-50%); background: #fff; box-shadow: var(--md-elev-1); }
+/* Smooth morph: ease the faders when a preset / AutoEq / reset JUMPS the values (not during a drag). */
+.wp-eq-morph .wp-eqf-fill { transition: height .28s ease; }
+.wp-eq-morph .wp-eqf-thumb { transition: bottom .28s ease; }
+/* A/B compare button (text in the icon-button slot) */
+.wp-eq-ab { font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+
+.wp-knob { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.wp-knob-dial { position: relative; cursor: ns-resize; touch-action: none; display: grid; place-items: center; }
+.wp-knob-ind { position: absolute; left: 50%; top: 50%; width: 3px; height: 38%; margin-left: -1.5px; border-radius: 2px; background: var(--md-on-surface); transform-origin: 50% 0; }
+.wp-knob-label { color: var(--md-on-surface-variant); margin-top: 2px; }
+.wp-knob-sub { font-variant-numeric: tabular-nums; }
+
+.wp-eq-tone { display: flex; flex-wrap: wrap; gap: 20px 26px; align-items: center; justify-content: center; padding: 16px; width: 100%; align-content: center; }
+.wp-eq-limit { display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; padding: 18px; width: 100%; }
+.wp-eq-limit-note { max-width: 320px; text-align: center; }
+
+.wp-eq-scope { position: relative; height: 92px; flex: 0 0 auto; border-radius: var(--md-shape-md); overflow: hidden; background: var(--md-surface-container-low); }
+.wp-spectrum { display: block; width: 100%; }
+.wp-eq-curve-over { position: absolute; inset: 0; }
+.wp-eq-curve-over > * { width: 100%; height: 100%; }
+
+/* top control bar: mode segmented switch · audio-info · power */
+.wp-eq-top { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.wp-eq-modes { flex: 1 1 auto; min-width: 0; }
+.wp-eq-modes .wp-seg-item { display: inline-flex; align-items: center; justify-content: center; gap: 5px; flex: 1 1 0; }
+.wp-eq-iconbtn {
+  flex: 0 0 auto; display: grid; place-items: center; width: 38px; height: 38px; border: none; cursor: pointer;
+  border-radius: var(--md-shape-full); background: var(--md-surface-container-high); color: var(--md-on-surface-variant);
+}
+.wp-eq-power {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; border: none; cursor: pointer;
+  padding: 9px 16px; border-radius: var(--md-shape-full); font: inherit; font-weight: 700;
+  background: var(--md-surface-container-high); color: var(--md-on-surface-variant); transition: background .15s, color .15s;
+}
+.wp-eq-power-on { background: linear-gradient(135deg, var(--md-primary), color-mix(in srgb, var(--md-primary) 60%, #00c853)); color: var(--md-on-primary); }
+
+/* boost/cut legend, floated over the scope while editing bands */
+.wp-eq-legend { position: absolute; top: 6px; right: 8px; display: flex; gap: 10px; color: var(--md-on-surface-variant); pointer-events: none; }
+.wp-eq-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.wp-eq-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+/* labelled section blocks (Presets / Tune) */
+.wp-eq-section { display: flex; flex-direction: column; gap: 5px; flex: 0 0 auto; }
+.wp-eq-sec-label { color: var(--md-on-surface-variant); letter-spacing: .07em; padding: 0 2px; }
+.wp-eq-preset-row { display: flex; gap: 6px; overflow-x: auto; min-width: 0; padding-bottom: 2px; }
+.wp-eq-preset-row::-webkit-scrollbar { display: none; }
+
+/* slim quick-action row — single line of horizontal pills (Auto is the prominent, primary one) */
+.wp-eq-actions { display: flex; gap: 6px; align-items: stretch; }
+.wp-eq-act {
+  flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 8px; border: none; cursor: pointer;
+  border-radius: var(--md-shape-md); background: var(--md-surface-container-high); color: var(--md-on-surface);
+  font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; transition: background .15s, transform .1s;
+}
+.wp-eq-act:active { transform: scale(.96); }
+.wp-eq-act:disabled { opacity: .55; cursor: default; }
+.wp-eq-act-on { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.wp-eq-act-primary { flex: 1.5 1 0; background: linear-gradient(135deg, var(--md-primary), var(--md-tertiary, var(--md-primary))); color: var(--md-on-primary); }
+.wp-eq-act-icon { flex: 0 0 auto; padding: 10px 13px; } /* the niche headphone-import button, icon-only */
+
+/* ── Audio Info panel ─────────────────────────────────────────────────────── */
+.wp-ai { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.55); }
+.wp-ai-card {
+  width: 100%; max-width: 440px; max-height: 86dvh; overflow-y: auto;
+  background: var(--md-surface-container-high); color: var(--md-on-surface);
+  border-radius: var(--md-shape-xl); box-shadow: var(--md-elev-3); padding: 16px 18px;
+  animation: wpToastIn .2s var(--md-motion-emphasized);
+}
+.wp-ai-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.wp-ai-head .md-icon-btn { margin-left: auto; }
+.wp-ai-headmark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--md-surface-container-highest); }
+.wp-ai-chain { display: flex; flex-direction: column; }
+.wp-ai-tier { display: flex; gap: 12px; padding: 8px 0; }
+.wp-ai-tier-icon {
+  position: relative; flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--md-surface-container-highest); color: var(--md-on-surface-variant);
+}
+/* connector line down to the next tier */
+.wp-ai-tier:not(:last-child) .wp-ai-tier-icon::after {
+  content: ""; position: absolute; top: 32px; left: 50%; width: 1.5px; height: calc(100% + 16px);
+  transform: translateX(-50%); background: var(--md-outline-variant);
+}
+.wp-ai-tier-body { flex: 1; min-width: 0; }
+.wp-ai-tier-title { margin-bottom: 2px; }
+.wp-ai-line { display: flex; justify-content: space-between; gap: 12px; padding: 1px 0; }
+.wp-ai-label { flex: 0 0 auto; }
+.wp-ai-v { text-align: right; font-variant-numeric: tabular-nums; }
+.wp-ai-link { border: none; background: none; cursor: pointer; color: var(--md-primary); text-decoration: underline; text-underline-offset: 2px; padding: 0; }
+.wp-ai-link:active { opacity: .6; }
+.wp-ai-k { color: var(--md-on-surface); }
+.wp-ai-select {
+  width: 100%; padding: 7px 10px; margin: 4px 0; border-radius: var(--md-shape-sm);
+  background: var(--md-surface-container-highest); color: var(--md-on-surface); border: 1px solid var(--md-outline-variant);
+}
+.wp-ai-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+
+/* Track-options quick-nav tabs (Artist · Album · Year · Folder) — a chip row under the sheet header. */
+.wp-ta-navtabs { display: flex; gap: 8px; flex-wrap: wrap; padding: 4px 4px 10px; }
+.wp-ta-navtab {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%;
+  height: 34px; padding: 0 14px; border: none; border-radius: var(--md-shape-full); cursor: pointer;
+  background: var(--md-surface-container-high); color: var(--md-on-surface);
+  font-size: 13px; font-weight: 600;
+}
+.wp-ta-navtab:active { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.wp-ta-navtab .ellipsis { min-width: 0; }
+
+/* Audio Info — now-playing header (cover + title + spec badges). */
+.wp-ai-now {
+  display: flex; align-items: center; gap: 12px; padding: 10px; margin-bottom: 6px;
+  border-radius: var(--md-shape-l); background: var(--md-surface-container-high);
+}
+.wp-ai-cover {
+  flex: 0 0 auto; width: 48px; height: 48px; border-radius: 10px; overflow: hidden;
+  display: grid; place-items: center; background: var(--md-surface-container-highest);
+}
+.wp-ai-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wp-ai-nowtext { flex: 1; min-width: 0; }
+.wp-ai-badges { display: flex; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; max-width: 40%; }
+.wp-ai-badge {
+  font-size: 11px; font-weight: 600; letter-spacing: .02em; padding: 3px 8px; border-radius: 999px;
+  background: var(--md-surface-container-highest); color: var(--md-on-surface-variant);
+}
+.wp-ai-badge-on { background: color-mix(in srgb, var(--md-primary) 22%, transparent); color: var(--md-primary); }
+
+/* Customize-player sheet — grouped sections. */
+.wp-cust-reset { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.wp-cust-body { gap: 4px; }
+.wp-cust-group { padding: 4px 0; }
+.wp-cust-group + .wp-cust-group { border-top: 1px solid var(--md-outline-variant); margin-top: 6px; padding-top: 10px; }
+.wp-cust-grouptitle { text-transform: uppercase; letter-spacing: .06em; padding: 2px 2px 6px; }
+
+/* ── Lyrics: open-in-app provider chips ───────────────────────────────────── */
+.wp-chip-sm { padding: 4px 10px; font-size: 12px; }
+.wp-lyrics-apps { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 6px; justify-content: center; }
+.wp-lyrics-apps-inline { display: inline-flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+
+/* ── Library: search bar removed → compact actions row ────────────────────── */
+.wp-lib-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; padding: 2px 2px 6px; }
+.wp-search-bar { display: flex; align-items: center; gap: 4px; padding: 2px 0 8px; }
+.wp-search-input {
+  flex: 1; min-width: 0; padding: 11px 14px; border-radius: var(--md-shape-full);
+  border: 1px solid var(--md-outline-variant); background: var(--md-surface-container-high);
+  color: var(--md-on-surface); font: inherit;
+}
+.wp-search-input:focus { outline: none; border-color: var(--md-primary); }
+.wp-search-input::placeholder { color: var(--md-on-surface-variant); }
+
+/* quiet inline indexing status (replaces the loud progress toast) */
+.wp-scan-status { display: flex; flex-direction: column; gap: 3px; padding: 2px 4px 4px; }
+.wp-scan-info { padding: 0 2px; }
+
+/* ── Library song-view zoom ladder (list rows ↔ cover-grid tiles) ──────────── */
+.wp-songs-zoom { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.wp-songs-zoom .wp-vlist { flex: 1 1 auto; min-height: 0; }
+.wp-vg-row { left: 0; right: 0; display: flex; align-items: stretch; }
+.wp-vg-cell { min-width: 0; padding: 3px 5px; box-sizing: border-box; }
+
+.wp-song-row { height: 100%; }
+.wp-song-row .wp-row { display: flex; align-items: center; gap: 10px; width: 100%; height: 100%; min-width: 0; border: none; background: none; cursor: pointer; color: inherit; text-align: left; border-radius: var(--md-shape-md); padding: 0 8px; }
+.wp-song-row .wp-row:hover { background: var(--md-surface-container); }
+.wp-song-row.wp-row-active .wp-row { color: var(--md-primary); }
+.wp-song-row .wp-row-text { flex: 1 1 auto; min-width: 0; }
+.wp-song-row .wp-row-dur { flex: 0 0 auto; white-space: nowrap; }
+
+.wp-song-tile { display: flex; flex-direction: column; gap: 4px; width: 100%; height: 100%; min-width: 0; border: none; background: none; cursor: pointer; color: inherit; text-align: left; padding: 0; position: relative; }
+.wp-song-tile-art { width: 100%; aspect-ratio: 1; max-height: calc(100% - 42px); margin: 0 auto; border-radius: var(--md-shape-md); overflow: hidden; background: var(--md-surface-container-high); }
+.wp-song-tile-art .wp-cover { width: 100% !important; height: 100% !important; border-radius: 0 !important; }
+.wp-song-tile-title { color: var(--md-on-surface); font-weight: 500; }
+.wp-song-active .wp-song-tile-title { color: var(--md-primary); }
+
+.wp-zoom-ctl { display: flex; align-items: center; }
+.wp-songs-zoom { touch-action: pan-y; } /* vertical scroll, but capture 2-finger pinch for zoom */
+
+/* ── Library: Browse category menu (rounded circular icons, pinch-zoomable) ── */
+/* Poweramp-style category grid — zooms (columns change) with the same pinch as the songs list */
+.wp-cats { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; padding: 6px 4px 12px; align-content: start; touch-action: pan-y; }
+.wp-cats[data-z="s"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.wp-cats[data-z="l"] { grid-template-columns: 1fr; }
+.wp-cat-row { display: flex; align-items: center; gap: 14px; min-width: 0; width: 100%; border: none; background: none; cursor: pointer; color: inherit; text-align: left; padding: 8px; border-radius: var(--md-shape-md); }
+.wp-cat-row:hover { background: var(--md-surface-container); }
+.wp-cat-icon { flex: 0 0 auto; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; }
+.wp-cat-icon svg { width: 24px; height: 24px; }
+.wp-cat-label { color: var(--md-on-surface); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wp-cats[data-z="s"] .wp-cat-icon { width: 36px; height: 36px; }
+.wp-cats[data-z="s"] .wp-cat-icon svg { width: 20px; height: 20px; }
+.wp-cats[data-z="s"] .wp-cat-row { gap: 12px; padding: 5px 8px; }
+.wp-cats[data-z="l"] .wp-cat-icon { width: 56px; height: 56px; }
+.wp-cats[data-z="l"] .wp-cat-icon svg { width: 30px; height: 30px; }
+.wp-cats[data-z="l"] .wp-cat-row { gap: 18px; padding: 12px 8px; }
+.wp-cats[data-z="l"] .wp-cat-label { font-size: 18px; }
+
+/* rounded selection + currently-playing highlight in the song zoom view */
+.wp-song-row.wp-row-active .wp-row { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+.wp-song-row.wp-row-checked .wp-row { background: transparent; }
+.wp-song-tile.wp-song-active .wp-song-tile-art,
+.wp-song-tile.wp-tile-checked .wp-song-tile-art { outline: 2.5px solid var(--md-primary); outline-offset: 2px; }
+
+/* smoother zoom: ease size changes (helps the category menu + within-level tweaks) */
+.wp-song-tile-art, .wp-cat-icon, .wp-cat-row, .wp-cat-label { transition: width .16s ease, height .16s ease, gap .16s ease, padding .16s ease, font-size .16s ease; }
+.wp-song-row .wp-row, .wp-song-tile { transition: background .12s ease, color .12s ease; }
+
+/* ── Scrollbar customization (Settings → Look) ────────────────────────────── */
+:root ::-webkit-scrollbar { width: 8px; height: 8px; }
+:root ::-webkit-scrollbar-thumb { background: var(--md-surface-container-highest); border-radius: 6px; }
+:root ::-webkit-scrollbar-thumb:hover { background: var(--md-outline); }
+:root ::-webkit-scrollbar-track { background: transparent; }
+:root[data-scrollbar="thin"] ::-webkit-scrollbar { width: 5px; height: 5px; }
+:root[data-scrollbar="thin"] { scrollbar-width: thin; }
+:root[data-scrollbar="normal"] ::-webkit-scrollbar { width: 12px; height: 12px; }
+:root[data-scrollbar="overlay"] ::-webkit-scrollbar { width: 8px; height: 8px; }
+:root[data-scrollbar="overlay"] ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--md-on-surface) 30%, transparent); }
+:root[data-scrollbar="hidden"] ::-webkit-scrollbar { width: 0; height: 0; }
+:root[data-scrollbar="hidden"] { scrollbar-width: none; }
+
+/* ── Library: Explore — Material-shaped tiles you pan horizontally (a "map") ── */
+.wp-explore {
+  flex: 1 1 auto; min-height: 0; overflow-x: auto; overflow-y: hidden;
+  display: grid; grid-auto-flow: column; grid-template-rows: repeat(3, min-content); gap: 20px 18px;
+  padding: 12px 6px 18px; align-content: start; scroll-snap-type: x proximity;
+  /* feather the edges so the constellation fades smoothly into the window instead of a hard cut */
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 32px, #000 calc(100% - 32px), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 32px, #000 calc(100% - 32px), transparent 100%);
+}
+/* windowed Explore: a plain horizontal scroller; the inner spacer is absolutely-positioned */
+.wp-explore-v { display: block; }
+.wp-explore-v .wp-shape-tile { will-change: transform; }
+.wp-explore::-webkit-scrollbar { height: 8px; }
+.wp-explore::-webkit-scrollbar-thumb { background: var(--md-surface-container-highest); border-radius: 4px; }
+.wp-shape-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 7px; width: 124px;
+  border: none; background: none; cursor: pointer; color: inherit; scroll-snap-align: start;
+  transition: transform .12s var(--md-motion-standard);
+}
+.wp-shape-tile:hover { transform: translateY(-3px) scale(1.03); }
+.wp-shape { display: block; width: 118px; height: 118px; aspect-ratio: 1; background: var(--md-surface-container-high); }
+.wp-shape .wp-cover { width: 100% !important; height: 100% !important; aspect-ratio: 1; border-radius: 0 !important; }
+.wp-shape .wp-cover img { width: 100%; height: 100%; object-fit: cover; }
+.wp-shape-label { max-width: 118px; color: var(--md-on-surface); text-align: center; font-weight: 500; }
+
+.wp-shape-circle { border-radius: 50%; overflow: hidden; }
+.wp-shape-squircle { border-radius: 34%; overflow: hidden; }
+.wp-shape-diamond { clip-path: polygon(50% 1%, 99% 50%, 50% 99%, 1% 50%); }
+.wp-shape-hex { clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0 50%); }
+.wp-shape-penta { clip-path: polygon(50% 0, 100% 38%, 82% 100%, 18% 100%, 0 38%); }
+.wp-shape-octa { clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); }
+.wp-shape-tri { clip-path: polygon(50% 3%, 97% 95%, 3% 95%); }
+.wp-shape-clover {
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg fill='%23000'%3E%3Ccircle cx='31' cy='31' r='31'/%3E%3Ccircle cx='69' cy='31' r='31'/%3E%3Ccircle cx='31' cy='69' r='31'/%3E%3Ccircle cx='69' cy='69' r='31'/%3E%3Crect x='19' y='19' width='62' height='62'/%3E%3C/g%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg fill='%23000'%3E%3Ccircle cx='31' cy='31' r='31'/%3E%3Ccircle cx='69' cy='31' r='31'/%3E%3Ccircle cx='31' cy='69' r='31'/%3E%3Ccircle cx='69' cy='69' r='31'/%3E%3Crect x='19' y='19' width='62' height='62'/%3E%3C/g%3E%3C/svg%3E");
+  -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+}
+/* Rounded "blob" shapes (Explore map tiles) — varied but all soft-edged, no sharp corners.
+   border-radius rounds cleanly without blurring the artwork (a clip-path polygon can't be rounded). */
+/* Rounded SQUARES (Explore tiles) — full cover fits, only the corners soften, no side is clipped. */
+.wp-shape-sq1, .wp-shape-sq2, .wp-shape-sq3 { overflow: hidden; }
+.wp-shape-sq1 { border-radius: 11%; }
+.wp-shape-sq2 { border-radius: 17%; }
+.wp-shape-sq3 { border-radius: 24%; }
+.wp-shape-r1, .wp-shape-r2, .wp-shape-r3, .wp-shape-r4, .wp-shape-r5, .wp-shape-r6 { overflow: hidden; }
+.wp-shape-r1 { border-radius: 42% 58% 57% 43% / 48% 42% 58% 52%; }
+.wp-shape-r2 { border-radius: 58% 42% 38% 62% / 55% 48% 52% 45%; }
+.wp-shape-r3 { border-radius: 50% 50% 42% 58% / 58% 42% 58% 42%; }
+.wp-shape-r4 { border-radius: 38%; }
+.wp-shape-r5 { border-radius: 50%; }
+.wp-shape-r6 { border-radius: 60% 40% 47% 53% / 50% 56% 44% 50%; }
+
+/* ── NAV BLOOM: press-and-hold tab → an arc of clean glossy glass pills ──────── */
+.wp-bloom { position: fixed; inset: 0; z-index: 1300; pointer-events: none; }
+.wp-bloom-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.28); pointer-events: auto;
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+.wp-bloom-icons { position: absolute; inset: 0; pointer-events: none; }
+/* each action = a SOLID organic theme-coloured blob (colour + amoeba border-radius come from
+   inline style). Crisp icon, soft shadow, springy. Hovered one pops + glows. */
+.wp-bloom-pill {
+  position: fixed; padding: 0; border: none;
+  display: grid; place-items: center; pointer-events: auto; cursor: pointer; color: #fff;
+  box-shadow: 0 10px 22px rgba(0,0,0,.34);
+  transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.16s ease;
+}
+.wp-bloom-pill svg { width: 26px; height: 26px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.45)); }
+.wp-bloom-pill.near { transform: scale(1.08); }
+.wp-bloom-pill.active {
+  transform: scale(1.22);
+  box-shadow: 0 12px 30px rgba(0,0,0,.42), 0 0 0 3px color-mix(in srgb, #fff 70%, transparent);
+}
+.wp-bloom-label {
+  position: fixed; transform: translateX(-50%); pointer-events: none; z-index: 1;
+  padding: 4px 11px; border-radius: var(--md-shape-full); white-space: nowrap;
+  font-size: 12px; font-weight: 600; color: var(--md-on-surface);
+  background: color-mix(in srgb, var(--md-surface-container-high) 80%, transparent);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border: 1px solid color-mix(in srgb, var(--md-outline-variant) 55%, transparent);
+  box-shadow: var(--md-elev-2);
+}
+@include reduced-motion {
+  .wp-bloom-blob, .wp-bloom-pill { transition: none; }
+}
+
+/* ── NAV BLOOM: charge-on-hold + integrate with the held button ────────────── */
+/* the held tab "charges" toward the bloom: pill swells + an accent ring grows. */
+.wp-nav-item { transition: opacity 0.18s ease; }
+.wp-nav-charging .wp-nav-pill,
+.wp-nav-rooted .wp-nav-pill {
+  background: var(--md-secondary-container); color: var(--md-on-secondary-container);
+  transform: scale(1.16);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--md-primary) 22%, transparent),
+    0 0 18px color-mix(in srgb, var(--md-primary) 30%, transparent);
+  transition: transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 240ms ease, background 160ms, color 160ms;
+}
+.wp-nav-charging-any .wp-nav-item:not(.wp-nav-charging):not(.wp-nav-rooted) { opacity: 0.4; }
+.wp-nav-bloom-open {
+  background: transparent; border-color: transparent; box-shadow: none;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* bouncy KICK on the tab the moment its hold completes (becomes the bloom root). */
+.wp-nav-rooted .wp-nav-pill { animation: wpTabKick 0.36s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes wpTabKick {
+  0% { transform: scale(1.16); }
+  45% { transform: scale(1.3); }
+  100% { transform: scale(1.16); }
+}
+@include reduced-motion {
+  .wp-nav-rooted .wp-nav-pill { animation: none; }
+}
+
+/* ── Now-Playing view switch (Cover / Visualizer / Lyrics) inside the actions sheet ── */
+.wp-np-viewseg {
+  display: flex; gap: 6px; padding: 4px; margin: 2px 2px 6px;
+  background: var(--md-surface-container-high); border-radius: var(--md-shape-full);
+}
+.wp-np-viewseg-btn {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 40px; border: none; border-radius: var(--md-shape-full); cursor: pointer;
+  background: none; color: var(--md-on-surface-variant); font: inherit; font-weight: 600;
+  transition: background var(--md-motion-standard), color var(--md-motion-standard);
+}
+.wp-np-viewseg-btn.on { background: var(--md-primary); color: var(--md-on-primary); }
+
+.wp-sheet-divider { height: 1px; background: var(--md-outline-variant); margin: 6px 8px; border-radius: 1px; }
+
+/* ── Settings "open a sub-window" container button ──────────────────────────── */
+.wp-set-card {
+  background: var(--md-surface-container); border-radius: var(--md-shape-lg);
+  margin: 2px 0; overflow: hidden;
+}
+.wp-set-open {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 14px 14px;
+  border: none; background: none; color: var(--md-on-surface); text-align: left; cursor: pointer;
+}
+.wp-set-open:active { background: var(--md-surface-container-high); }
+.wp-set-open-ico {
+  width: 40px; height: 40px; flex-shrink: 0; display: grid; place-items: center;
+  border-radius: var(--md-shape-md); background: color-mix(in srgb, var(--md-primary) 14%, transparent);
+}
+.wp-set-open .wp-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+
+/* ── Transition studio (presets + custom unit-aware crossfade editor) ────────── */
+.wp-trans { display: flex; flex-direction: column; }
+.wp-trans-head { padding: 2px 6px 10px; }
+.wp-trans-tabs {
+  position: relative; display: flex; gap: 4px; padding: 4px;
+  background: var(--md-surface-container-high); border-radius: var(--md-shape-full); margin: 0 2px 14px;
+}
+.wp-trans-tab {
+  position: relative; z-index: 1; flex: 1; height: 42px; border: none; background: none; cursor: pointer;
+  font: inherit; font-weight: 700; color: var(--md-on-surface-variant); border-radius: var(--md-shape-full);
+  transition: color var(--md-motion-standard);
+}
+.wp-trans-tab.on { color: var(--md-on-primary); }
+.wp-trans-tab-ink {
+  position: absolute; z-index: 0; top: 4px; left: 4px; width: calc(50% - 4px); height: calc(100% - 8px);
+  background: var(--md-primary); border-radius: var(--md-shape-full);
+  transition: transform .26s cubic-bezier(.2,.9,.2,1);
+}
+
+.wp-trans-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 2px 4px; overflow-y: auto; }
+.wp-trans-card {
+  position: relative; display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+  padding: 14px 14px; border: 1.5px solid var(--md-outline-variant); border-radius: var(--md-shape-lg);
+  background: var(--md-surface-container); color: var(--md-on-surface); cursor: pointer; text-align: left;
+  transition: border-color var(--md-motion-standard), background var(--md-motion-standard), transform var(--md-motion-standard);
+}
+.wp-trans-card:active { transform: scale(.97); }
+.wp-trans-card.on { border-color: var(--md-primary); background: color-mix(in srgb, var(--md-primary) 12%, var(--md-surface-container)); }
+.wp-trans-card-ico { display: grid; place-items: center; width: 38px; height: 38px; border-radius: var(--md-shape-md); background: var(--md-surface-container-highest); margin-bottom: 4px; }
+.wp-trans-card.on .wp-trans-card-ico { background: color-mix(in srgb, var(--md-primary) 22%, transparent); color: var(--md-primary); }
+.wp-trans-card-sub { color: var(--md-on-surface-variant); }
+.wp-trans-card-check { position: absolute; top: 10px; right: 10px; color: var(--md-primary); }
+
+.wp-trans-custom { display: flex; flex-direction: column; gap: 16px; padding: 0 4px 6px; overflow-y: auto; }
+.wp-trans-preview {
+  position: relative; height: 132px; border-radius: var(--md-shape-lg); overflow: hidden;
+  background: var(--md-surface-container); display: grid; place-items: center;
+}
+.wp-trans-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wp-trans-curve { fill: none; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+.wp-trans-curve.out { stroke: color-mix(in srgb, var(--md-on-surface-variant) 55%, transparent); }
+.wp-trans-curve.in { stroke: var(--md-primary); }
+.wp-trans-readout { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; text-shadow: 0 1px 8px var(--md-surface); }
+.wp-trans-big { font-size: 34px; font-weight: 800; line-height: 1.05; color: var(--md-on-surface); letter-spacing: -.5px; }
+
+.wp-trans-units { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.wp-trans-unit {
+  flex: 1 1 0; min-width: 64px; height: 38px; border: 1.5px solid var(--md-outline-variant); border-radius: var(--md-shape-full);
+  background: none; color: var(--md-on-surface-variant); font: inherit; font-weight: 600; cursor: pointer;
+  transition: all var(--md-motion-standard);
+}
+.wp-trans-unit.on { border-color: var(--md-primary); background: var(--md-primary); color: var(--md-on-primary); }
+.wp-trans-bpmhint { flex-basis: 100%; text-align: center; color: var(--md-on-surface-variant); }
+
+.wp-trans-setrow { display: flex; align-items: center; gap: 12px; }
+.wp-trans-step {
+  width: 46px; height: 46px; flex-shrink: 0; border: none; border-radius: var(--md-shape-md);
+  background: var(--md-surface-container-high); color: var(--md-on-surface); cursor: pointer; display: grid; place-items: center;
+}
+.wp-trans-step:active { transform: scale(.92); background: var(--md-surface-container-highest); }
+.wp-trans-slider { flex: 1; accent-color: var(--md-primary); height: 6px; }
+
+.wp-trans-field { display: flex; flex-direction: column; gap: 8px; }
+.wp-trans-curves { display: flex; gap: 8px; }
+.wp-trans-curvebtn {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 6px;
+  border: 1.5px solid var(--md-outline-variant); border-radius: var(--md-shape-lg);
+  background: var(--md-surface-container); color: var(--md-on-surface-variant); cursor: pointer; font: inherit;
+  transition: all var(--md-motion-standard);
+}
+.wp-trans-curvebtn svg { width: 100%; height: 30px; }
+.wp-trans-curvebtn path { fill: none; stroke: currentColor; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+.wp-trans-curvebtn.on { border-color: var(--md-primary); color: var(--md-primary); background: color-mix(in srgb, var(--md-primary) 10%, var(--md-surface-container)); }
+
+.wp-trans-gapless {
+  display: flex; align-items: center; gap: 14px; padding: 12px 14px; border: none;
+  background: var(--md-surface-container); border-radius: var(--md-shape-lg); color: var(--md-on-surface); cursor: pointer; text-align: left;
+}
+.wp-trans-gapless .wp-row-text { flex: 1; min-width: 0; }
+
+/* ── Settings container "open" chevron chip ─────────────────────────────────── */
+.wp-set-open-go {
+  width: 30px; height: 30px; flex-shrink: 0; display: grid; place-items: center; border-radius: 50%;
+  background: var(--md-surface-container-highest); color: var(--md-on-surface-variant);
+  transition: transform var(--md-motion-standard), background var(--md-motion-standard);
+}
+.wp-set-open:active .wp-set-open-go { transform: translateX(2px); background: color-mix(in srgb, var(--md-primary) 20%, transparent); color: var(--md-primary); }
+
+/* ── WhatsApp-style swipeable row ───────────────────────────────────────────── */
+/* Clip the colored action panel to the SAME radius as the rows (md). It used to be `lg` (wider), so
+   the panel's corners peeked past the row's tighter rounded corners on the left edge. */
+.wp-swipe { position: relative; height: 100%; overflow: hidden; border-radius: var(--md-shape-md); }
+.wp-swipe-act {
+  position: absolute; top: 0; bottom: 0; display: grid; place-items: center; overflow: hidden;
+  color: #fff; pointer-events: none;
+}
+.wp-swipe-left { left: 0; }
+.wp-swipe-right { right: 0; }
+.wp-swipe-content { display: flex; align-items: center; gap: 9px; padding: 0 14px; white-space: nowrap; transition: transform .12s cubic-bezier(.2,.9,.2,1); }
+.wp-swipe-right .wp-swipe-content { flex-direction: row-reverse; }
+.wp-swipe-arrow { display: grid; place-items: center; opacity: .8; transition: transform .06s linear; }
+.wp-swipe-ico { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,.22); }
+.wp-swipe-label { font-weight: 700; font-size: 14px; max-width: 0; overflow: hidden; opacity: 0; transition: max-width .2s ease, opacity .18s ease; }
+.wp-swipe-label.on { max-width: 130px; opacity: 1; }
+.wp-swipe-body { position: relative; z-index: 1; height: 100%; will-change: transform; }
+
+/* Settings swipe-action picker chip */
+.wp-swipe-pick {
+  display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 14px;
+  border: none; border-radius: var(--md-shape-full); cursor: pointer; font: inherit; font-weight: 600;
+  background: var(--md-surface-container-highest); color: var(--md-on-surface);
+}
+.wp-swipe-pick:active { background: color-mix(in srgb, var(--md-primary) 18%, transparent); }
+
+/* ── Library loading skeleton (shown instead of "No music yet" during hydration) ── */
+.wp-lib-loading { flex: 1; min-height: 0; overflow: hidden; padding: 6px 2px; display: flex; flex-direction: column; gap: 10px; }
+.wp-skel-row { display: flex; align-items: center; gap: 12px; padding: 4px 6px; opacity: 0; animation: wpSkelIn .4s ease forwards; }
+@keyframes wpSkelIn { to { opacity: 1; } }
+.wp-skel-art { width: 46px; height: 46px; border-radius: var(--md-shape-sm); flex-shrink: 0; }
+.wp-skel-lines { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+.wp-skel-line { height: 12px; border-radius: 6px; width: 70%; }
+.wp-skel-line.short { width: 42%; height: 10px; }
+.wp-skel-art, .wp-skel-line {
+  background: linear-gradient(100deg, var(--md-surface-container) 30%, var(--md-surface-container-high) 50%, var(--md-surface-container) 70%);
+  background-size: 220% 100%; animation: wpShimmer 1.3s ease-in-out infinite;
+}
+@keyframes wpShimmer { from { background-position: 180% 0; } to { background-position: -80% 0; } }
+.wp-lib-loading-label { text-align: center; padding: 10px 0; }
+
+/* ── Settings info (i) button + anchored popover ────────────────────────────── */
+.wp-set-title-line { display: flex; align-items: center; gap: 6px; }
+.wp-info-btn {
+  display: inline-grid; place-items: center; width: 24px; height: 24px; border: none; padding: 0;
+  background: none; color: var(--md-on-surface-variant); cursor: pointer; border-radius: 50%; flex-shrink: 0;
+}
+.wp-info-btn:active { background: var(--md-surface-container-highest); color: var(--md-primary); }
+/* The info text is a FIXED popup pinned to the bottom, OVER the mini-player + nav bar. A light scrim
+   dims the rest so the explanation reads as focused; tap-out closes it. */
+.wp-info-scrim { position: fixed; inset: 0; z-index: 1400; animation: wpInfoFade .12s ease; background: rgba(0,0,0,.32); }
+@keyframes wpInfoFade { from { opacity: 0; } to { opacity: 1; } }
+.wp-info-pop {
+  position: fixed; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom));
+  width: auto; max-width: 560px; margin: 0 auto;
+  background: var(--md-surface-container-high); border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-xl); box-shadow: 0 -6px 30px rgba(0,0,0,.45); padding: 16px;
+  display: flex; flex-direction: column; gap: 8px; animation: wpInfoIn .2s cubic-bezier(.16,1,.3,1);
+}
+@keyframes wpInfoIn { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+.wp-info-head { display: flex; align-items: center; gap: 8px; }
+.wp-info-close { margin-left: auto; flex-shrink: 0; }
+.wp-info-extra { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }
+
+/* ── Hold-timeline → fullscreen Sections editor ─────────────────────────────── */
+.wp-seced-scrim {
+  position: fixed; inset: 0; z-index: 1300; display: grid; place-items: center; padding: 16px;
+  background: color-mix(in srgb, var(--md-background) 55%, transparent);
+  backdrop-filter: blur(22px) saturate(1.2); -webkit-backdrop-filter: blur(22px) saturate(1.2);
+  animation: wpSecedFade .22s ease both;
+}
+@keyframes wpSecedFade { from { opacity: 0; } to { opacity: 1; } }
+.wp-seced-scrim.wp-seced-closing { animation: wpSecedFade .22s ease reverse both; }
+.wp-seced {
+  width: 100%; max-width: 720px; display: flex; flex-direction: column; gap: 14px;
+  background: var(--md-surface-container); border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-xl); box-shadow: var(--md-elev-3); padding: 16px 16px 18px;
+  transform-origin: bottom center; animation: wpSecedRise .28s cubic-bezier(.2,.9,.2,1) both;
+}
+@keyframes wpSecedRise { from { opacity: 0; transform: translateY(60px) scale(.92); } to { opacity: 1; transform: none; } }
+.wp-seced-closing .wp-seced { animation: wpSecedRise .24s cubic-bezier(.2,.9,.2,1) reverse both; }
+.wp-seced-head { display: flex; align-items: center; gap: 10px; }
+.wp-seced-head .wp-row-text { flex: 1; min-width: 0; }
+.wp-seced-toggle {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1.5px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-full); background: none; color: var(--md-on-surface-variant); font: inherit; font-weight: 600; cursor: pointer;
+}
+.wp-seced-toggle.on { border-color: var(--md-primary); background: color-mix(in srgb, var(--md-primary) 14%, transparent); color: var(--md-primary); }
+
+.wp-seced-stage { position: relative; border-radius: var(--md-shape-lg); overflow: hidden; background: var(--md-surface-container-low); padding-top: 20px; }
+.wp-seced-stage .wp-songseek { position: relative; z-index: 1; }
+.wp-seced-bands { position: absolute; left: 0; right: 0; top: 20px; bottom: 0; z-index: 0; pointer-events: none; }
+.wp-seced-band { position: absolute; top: 0; bottom: 0; opacity: 0.14; }
+.wp-seced-grid { position: absolute; left: 0; right: 0; top: 20px; bottom: 0; z-index: 2; pointer-events: none; }
+.wp-seced-bar { position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--md-on-surface) 26%, transparent); }
+.wp-seced-bar.beat { background: color-mix(in srgb, var(--md-on-surface) 11%, transparent); }
+
+/* section FLAGS — a pennant (› tip) planted at each section start, with a pole down the waveform */
+.wp-seced-flag { position: absolute; top: 0; bottom: 0; z-index: 4; border: none; background: none; padding: 0; cursor: pointer; }
+.wp-seced-flag-tag {
+  position: absolute; top: 0; left: 0; height: 18px; line-height: 18px; display: inline-flex; align-items: center;
+  padding: 0 13px 0 7px; max-width: 130px; overflow: hidden; text-overflow: ellipsis;
+  font-size: 11px; font-weight: 700; color: #fff; white-space: nowrap; background: var(--c);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 0 100%); /* › tip */
+  transition: transform .12s cubic-bezier(.2,.9,.2,1);
+}
+.wp-seced-flag-pole { position: absolute; top: 18px; bottom: 0; left: 0; width: 2px; background: var(--c); opacity: .45; }
+.wp-seced-flag.on .wp-seced-flag-tag { transform: translateY(-1px) scale(1.04); box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+.wp-seced-flag.on .wp-seced-flag-pole { opacity: .9; width: 2.5px; }
+.wp-seced-flag:active .wp-seced-flag-tag { transform: scale(1.07); }
+
+.wp-seced-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.wp-seced-foot-actions { display: flex; align-items: center; gap: 10px; }
+.wp-seced-play { width: 56px; height: 56px; }
+
+/* Sections editor — editing controls */
+.wp-seced-handle {
+  position: absolute; top: 0; bottom: 0; width: 26px; transform: translateX(-13px); z-index: 3;
+  display: grid; place-items: center; cursor: ew-resize; touch-action: none;
+}
+.wp-seced-handle-grip {
+  width: 3px; height: 100%; background: var(--md-on-surface); border-radius: 2px; opacity: .75;
+  box-shadow: 0 0 0 1px var(--md-surface);
+}
+.wp-seced-handle::after { content: ""; width: 14px; height: 14px; position: absolute; top: 50%; transform: translateY(-50%); border-radius: 50%; background: var(--md-primary); box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.wp-seced-editrow { display: flex; align-items: center; gap: 10px; }
+.wp-seced-name { flex: 1; background: var(--md-surface-container-high); border-radius: var(--md-shape-md); padding: 9px 12px; min-width: 0; }
+.wp-seced-tiers { display: flex; gap: 6px; }
+.wp-seced-tier { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; background: none; cursor: pointer; display: grid; place-items: center; padding: 0; }
+.wp-seced-tier > span { width: 18px; height: 18px; border-radius: 50%; background: var(--c); }
+.wp-seced-tier.on { border-color: var(--md-on-surface); }
+.wp-seced-edithint { padding: 2px 4px; }
+
+/* ── Landscape / horizontal phone layout ────────────────────────────────────── */
+@include short-landscape {
+  /* respect a notch on the left/right edge in landscape (NOT the nav — it's a centred icon group now,
+     adding asymmetric notch padding would knock it off-centre) */
+  .wp-content { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+
+  /* PLAYER (landscape): COVER on the left — centred + capped so it never overflows the top — and ALL
+     text + controls in ONE vertically-CENTRED column on the right (.wp-np-controls). Centring the controls
+     as a group keeps the play buttons visible in the middle instead of dropping them under the dock. */
+  .wp-np {
+    display: flex; flex-direction: row; align-items: center; gap: 26px;
+    height: 100%; box-sizing: border-box; overflow: hidden;
+    /* full dock band reserved at the bottom so the column clears the centred tab dock */
+    padding: max(8px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(#{$dock-height} + env(safe-area-inset-bottom) + 10px) max(16px, env(safe-area-inset-left));
+  }
+  /* square cover, sized to USE the available space: as tall as the row allows, capped by ~46vw so the
+     controls keep their half. (On a short phone-landscape it's height-bound; on a tall desktop window it
+     grows much larger than the old 260px cap so the landscape view fills the window.) */
+  .wp-np-stage { flex: 0 0 auto; align-self: center; height: min(82vh, 46vw); width: auto; aspect-ratio: 1; max-width: 46vw; margin: 0; }
+  .wp-np-cover { width: 100%; height: 100%; object-fit: cover; }
+  /* the right column: meta + waveform + transport, vertically centred as a tidy group */
+  .wp-np-controls { display: flex; flex-direction: column; justify-content: center; gap: 10px; flex: 1 1 auto; min-width: 0; height: 100%; }
+  .wp-np-meta { margin-top: 0; }
+  .wp-np-meta-text { text-align: left; }
+  .wp-np-transport { justify-content: flex-start; gap: 12px; padding-bottom: 0; }
+  /* compact text/controls so the centred column stays tidy on the short height */
+  .wp-np-footer, .wp-np-info { display: none; }
+  .wp-np-meta-text .md-headline-s { font-size: 20px; line-height: 1.15; }
+  .wp-np-meta-text .md-body-s { display: none; }   /* drop the album line (artist is enough here) */
+  .wp-stars { margin-top: 2px; }
+  .wp-stars .wp-star { padding: 1px; }
+  .wp-np-seek-bar { min-height: 46px; }
+  .wp-np-transport .wp-fab { width: 58px; height: 58px; }
+  .wp-np-transport .wp-big { width: 48px; height: 48px; }
+
+  /* sheets & the sections editor: cap height so they fit + scroll */
+  .wp-sheet-tall { max-height: 94vh; }
+  .wp-seced { max-height: 94vh; overflow-y: auto; }
+
+  /* tighten the mini-player so it doesn't eat the short height */
+  .wp-mini { padding-top: 4px; padding-bottom: 4px; }
+}
+
+/* Desktop LANDSCAPE (wide AND tall) → a balanced, CENTRED cover↔controls pair. The phone-landscape rules
+   above make the cover fill the whole SHORT height and the controls float with dead space, which looks
+   sparse on a tall desktop window. Here we cap both and centre the pair as a group. */
+@media (orientation: landscape) and (min-width: $bp-desktop) and (min-height: 620px) {
+  .wp-np { justify-content: center; gap: clamp(28px, 5vw, 80px); align-items: center; }
+  .wp-np-stage { height: min(66vh, 40vw); max-width: 40vw; align-self: center; }
+  /* right column = SAME height as the cover: title + rating at the TOP, timeline + transport at the BOTTOM
+     (each its own row). margin-top:auto on the seek pushes it + the controls + footer down. */
+  .wp-np-controls {
+    flex: 0 1 560px; max-width: 560px; height: min(66vh, 40vw);
+    justify-content: flex-start; gap: 12px;
+  }
+  .wp-np-controls > .wp-np-seek { margin-top: auto; }    /* timeline + everything below → bottom */
+  .wp-np-meta-text .md-headline-s { font-size: 28px; }   /* a bit bigger — there's room on desktop */
+  .wp-np-transport .wp-fab { width: 64px; height: 64px; }
+  /* desktop landscape has the vertical room → bring back the queue ("Up Next") + audio-info footer */
+  .wp-np-footer, .wp-np-info { display: flex; }
+}
+
+/* SwipeRow: subtle lift once the hold arms the row swipe (so a quick swipe still switches tabs) */
+.wp-swipe-armed { box-shadow: inset 3px 0 0 var(--md-primary), inset -3px 0 0 var(--md-primary); }
+
+/* ── Performance presets (game-style graphics-settings cards) ─────────────── */
+.wp-perf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  padding: 0 6px;
+}
+.wp-perf-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px;
+  text-align: left;
+  border-radius: var(--md-shape-md);
+  border: 1.5px solid var(--md-outline-variant);
+  background: var(--md-surface-container);
+  color: var(--md-on-surface);
+  cursor: pointer;
+  transition: border-color .15s, background .15s, transform .12s;
+  .wp-perf-card-ico { color: var(--md-on-surface-variant); margin-bottom: 2px; }
+  &:active { transform: scale(.98); }
+  &.on {
+    border-color: var(--md-primary);
+    background: color-mix(in srgb, var(--md-primary) 14%, var(--md-surface-container));
+    .wp-perf-card-ico { color: var(--md-primary); }
+  }
+}
+
+/* Reduce-motion / no-motion (Settings → Performance → Motion). The music visualizer is exempt — it
+   drives its own rAF loop, not CSS transitions. */
+:root[data-anim="reduced"] *,
+:root[data-anim="reduced"] *::before,
+:root[data-anim="reduced"] *::after { animation-duration: .12s !important; transition-duration: .1s !important; }
+:root[data-anim="off"] *,
+:root[data-anim="off"] *::before,
+:root[data-anim="off"] *::after { animation-duration: .001s !important; transition-duration: .001s !important; scroll-behavior: auto !important; }
+
+/* Eco mode — set live by the runtime governor (Dynamic mode / Battery saver). Kills the expensive
+   background blur so a struggling or unplugged device stays smooth; reversed automatically. */
+:root[data-perf="eco"] { --wp-bg-blur: 0px !important; }
+:root[data-perf="eco"] .wp-np-backdrop,
+:root[data-perf="eco"] .wp-np-backdrop-img,
+:root[data-perf="eco"] .wp-np-backdrop-viz,
+:root[data-perf="eco"] .wp-app-bg,
+:root[data-perf="eco"] .wp-explore-blur { filter: none !important; }
+
+/* Frameless-desktop drag handle: a thin transparent strip across the very top so the window can be moved
+   even with native decorations off. Sits above content but is only 6px tall, so it reclaims the whole
+   title row while staying draggable. */
+.wp-drag-strip { position: fixed; top: 0; left: 0; right: 0; height: 6px; z-index: 9999; }
+
+/* Lag monitor HUD (Settings → Performance → Lag monitor). Top-left, never blocks input (pointer-events
+   none except the clear button), flashes red the moment a big stall lands so you can see WHEN it happens. */
+.wp-laghud {
+  position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 8px; z-index: 9000;
+  font: 600 11px/1.35 ui-monospace, "SF Mono", Menlo, monospace;
+  color: #cfe; background: rgba(10, 14, 12, 0.82); border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px; padding: 5px 8px; pointer-events: none; min-width: 116px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4); transition: border-color .25s, background .25s;
+}
+.wp-laghud-hit { border-color: #ff5d5d; background: rgba(60, 12, 12, 0.9); color: #ffd9d9; }
+.wp-laghud b { color: #7ee0a8; }
+.wp-laghud-last { margin-top: 2px; color: #ffb38a; }
+.wp-laghud-clear { pointer-events: auto; margin-top: 4px; font: inherit; color: #9fb; background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 5px; padding: 1px 6px; cursor: pointer; }
+
+/* Lite mode — set by settings.applyUi for the lighter performance presets (Smooth / Battery, any
+   low-power / reduced-motion mix) and always honoured under the eco governor. Drops EVERY live
+   backdrop-filter across the whole app: continuous real-time blur of frosted chrome (nav, mini-player,
+   sheets, dialogs) is the single biggest sustained GPU + battery + heat cost on a phone. Surfaces keep
+   their semi-opaque background colour, just un-blurred — so this is a genuinely felt difference between
+   the rich modes (full glass) and the light ones (cool & snappy). */
+:root[data-perflite="1"] *,
+:root[data-perflite="1"] *::before,
+:root[data-perflite="1"] *::after,
+:root[data-perf="eco"] *,
+:root[data-perf="eco"] *::before,
+:root[data-perf="eco"] *::after {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}

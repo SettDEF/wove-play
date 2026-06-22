@@ -1,0 +1,158 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Material 3 design tokens (dark, dynamic-color ready).
+   A tonal green/teal "WAVR" seed palette mapped to the M3 color roles.
+   Every component reads these — never hardcode a colour.
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+  /* primary */
+  --md-primary: #7ce2b0;
+  --md-on-primary: #003823;
+  --md-primary-container: #00513a;
+  --md-on-primary-container: #97ffca;
+
+  /* secondary / tertiary */
+  --md-secondary: #b5ccbd;
+  --md-on-secondary: #21352a;
+  --md-secondary-container: #374b3f;
+  --md-on-secondary-container: #d1e8d9;
+  --md-tertiary: #a4cdde;
+  --md-on-tertiary: #053543;
+  --md-tertiary-container: #234c5a;
+  --md-on-tertiary-container: #c0e9fb;
+
+  /* error */
+  --md-error: #ffb4ab;
+  --md-on-error: #690005;
+  --md-error-container: #93000a;
+  --md-on-error-container: #ffdad6;
+
+  /* neutral surfaces (M3 surface-container tonal ladder) */
+  --md-background: #0f1411;
+  --md-on-background: #dfe4dd;
+  --md-surface: #0f1411;
+  --md-on-surface: #dfe4dd;
+  --md-on-surface-variant: #bfc9c0;
+  --md-surface-dim: #0f1411;
+  --md-surface-bright: #353b36;
+  --md-surface-container-lowest: #090e0b;
+  --md-surface-container-low: #171d18;
+  --md-surface-container: #1b211c;
+  --md-surface-container-high: #262c27;
+  --md-surface-container-highest: #303731;
+
+  --md-outline: #899389;
+  --md-outline-variant: #3f4942;
+  --md-inverse-surface: #dfe4dd;
+  --md-inverse-on-surface: #2c322d;
+  --md-scrim: #000000;
+
+  /* shape (M3 corner scale) */
+  --md-shape-xs: 4px;
+  --md-shape-sm: 8px;
+  --md-shape-md: 12px;
+  --md-shape-lg: 16px;
+  --md-shape-xl: 28px;
+  --md-shape-full: 999px;
+
+  /* state-layer opacities */
+  --md-state-hover: 0.08;
+  --md-state-focus: 0.12;
+  --md-state-press: 0.12;
+
+  /* elevation shadows */
+  --md-elev-1: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15);
+  --md-elev-2: 0 1px 2px rgba(0,0,0,.3), 0 2px 6px 2px rgba(0,0,0,.15);
+  --md-elev-3: 0 4px 8px 3px rgba(0,0,0,.15), 0 1px 3px rgba(0,0,0,.3);
+
+  /* type scale (rounded, M3-ish) */
+  --md-font: "Roboto", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --md-motion-emphasized: 400ms cubic-bezier(0.2, 0, 0, 1);
+  --md-motion-standard: 250ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ── Light theme (M3 light roles). Accent primary/secondary/tertiary are overridden
+   inline by store/theme.ts with the correct polarity; these are sensible fallbacks. ── */
+:root[data-theme="light"] {
+  --md-primary: #006c4d;
+  --md-on-primary: #ffffff;
+  --md-primary-container: #8ff8c6;
+  --md-on-primary-container: #002115;
+
+  --md-secondary: #4d6357;
+  --md-on-secondary: #ffffff;
+  --md-secondary-container: #cfe9d9;
+  --md-on-secondary-container: #0a1f15;
+  --md-tertiary: #3d6470;
+  --md-on-tertiary: #ffffff;
+  --md-tertiary-container: #c0e9f8;
+  --md-on-tertiary-container: #001f28;
+
+  --md-error: #ba1a1a;
+  --md-on-error: #ffffff;
+  --md-error-container: #ffdad6;
+  --md-on-error-container: #410002;
+
+  --md-background: #f7faf4;
+  --md-on-background: #181d18;
+  --md-surface: #f7faf4;
+  --md-on-surface: #181d18;
+  --md-on-surface-variant: #404942;
+  --md-surface-dim: #d7dbd2;
+  --md-surface-bright: #f7faf4;
+  --md-surface-container-lowest: #ffffff;
+  --md-surface-container-low: #f1f5ed;
+  --md-surface-container: #ebefe7;
+  --md-surface-container-high: #e5eae2;
+  --md-surface-container-highest: #e0e4dc;
+
+  --md-outline: #717971;
+  --md-outline-variant: #c1c9bf;
+  --md-inverse-surface: #2c322d;
+  --md-inverse-on-surface: #edf2ea;
+  --md-scrim: #000000;
+
+  --md-elev-1: 0 1px 2px rgba(0,0,0,.12), 0 1px 3px 1px rgba(0,0,0,.08);
+  --md-elev-2: 0 1px 2px rgba(0,0,0,.12), 0 2px 6px 2px rgba(0,0,0,.08);
+  --md-elev-3: 0 4px 8px 3px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.12);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  font-family: var(--md-font);
+  font-size: calc(14px * var(--wp-fs, 1));
+  line-height: 20px;
+  background: var(--md-background);
+  color: var(--md-on-background);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  /* pin the shell to the window so Android can't rubber-band the nav off-screen */
+  position: fixed; inset: 0; overflow: hidden;
+}
+
+/* Form controls default to a system font + size in every browser — without this,
+   any button/input lacking a type class renders bigger and in a different family
+   than the rest of the UI. Force them to inherit the app's typography. */
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+/* ── reusable M3 type classes (scaled by --wp-fs from the font-size setting) ── */
+.md-display-s { font-size: calc(36px * var(--wp-fs, 1)); line-height: 44px; font-weight: 400; }
+.md-headline-s { font-size: calc(24px * var(--wp-fs, 1)); line-height: 32px; font-weight: 400; }
+.md-title-l { font-size: calc(22px * var(--wp-fs, 1)); line-height: 28px; font-weight: 500; }
+.md-title-m { font-size: calc(16px * var(--wp-fs, 1)); line-height: 24px; font-weight: 500; letter-spacing: .15px; }
+.md-title-s { font-size: calc(14px * var(--wp-fs, 1)); line-height: 20px; font-weight: 500; letter-spacing: .1px; }
+.md-body-l { font-size: calc(16px * var(--wp-fs, 1)); line-height: 24px; }
+.md-body-m { font-size: calc(14px * var(--wp-fs, 1)); line-height: 20px; letter-spacing: .25px; }
+.md-body-s { font-size: calc(12px * var(--wp-fs, 1)); line-height: 16px; letter-spacing: .4px; }
+.md-label-l { font-size: calc(14px * var(--wp-fs, 1)); line-height: 20px; font-weight: 500; letter-spacing: .1px; }
+.md-label-m { font-size: calc(12px * var(--wp-fs, 1)); line-height: 16px; font-weight: 500; letter-spacing: .5px; }
+
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -1,0 +1,11 @@
+[package]
+name = "wavr-cast"
+version = "0.1.0"
+edition = "2021"
+
+# Discovery is UDP multicast (SSDP) + mDNS and DLNA control is plain HTTP SOAP — all std sockets.
+# The Chromecast Cast-v2 channel needs TLS (devices use self-signed certs): rustls + ring, pure Rust
+# so it cross-compiles to Android cleanly (no OpenSSL). The CastMessage protobuf is hand-encoded, so
+# no protobuf codegen dependency.
+[dependencies]
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }

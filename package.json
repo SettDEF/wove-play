@@ -1,0 +1,39 @@
+{
+  "name": "wavr-play",
+  "version": "0.2.0",
+  "description": "Wove — a Material 3, local-first music player with an audio-reactive visualizer, parametric EQ and on-device taste mixes. Desktop + Android (Tauri 2).",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test:unit": "for f in src/audio/crossfade.test.ts src/lib/recommend.test.ts; do esbuild $f --bundle --platform=node --format=cjs | node || exit 1; done",
+    "tauri": "NO_STRIP=1 APPIMAGE_EXTRACT_AND_RUN=1 tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "NO_STRIP=1 APPIMAGE_EXTRACT_AND_RUN=1 tauri build",
+    "android:init": "tauri android init",
+    "android:dev": "tauri android dev",
+    "android:build": "tauri android build --apk --debug",
+    "android:build:arm64": "tauri android build --apk --debug --target aarch64",
+    "android:install": "adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk",
+    "android:apk": "npm run android:build && npm run android:install"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
+    "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "sass": "^1.101.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

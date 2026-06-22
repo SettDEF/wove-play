@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name={{name}}
+GenericName=Music Player
+Comment=Material 3 music player, visualizer & equalizer
+Exec={{exec}} %U
+Icon={{icon}}
+Terminal=false
+StartupNotify=true
+StartupWMClass={{exec}}
+Categories=AudioVideo;Audio;Player;Music;
+Keywords=music;player;audio;mp3;flac;ogg;playlist;equalizer;visualizer;wove;
+MimeType=audio/mpeg;audio/mp3;audio/flac;audio/x-flac;audio/ogg;audio/x-vorbis+ogg;audio/wav;audio/x-wav;audio/aac;audio/mp4;audio/x-m4a;audio/opus;audio/webm;application/ogg;

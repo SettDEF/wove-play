@@ -1,8 +1,11 @@
 name: Release
 
-# Builds installers for every pushed tag (e.g. `v0.2.0`) and attaches them to a draft GitHub Release.
-# Windows → NSIS `.exe` + `.msi` · Linux → deb / rpm / AppImage. macOS can be added the same way.
-# Trigger manually from the Actions tab (workflow_dispatch) or by pushing a version tag.
+# On a pushed version tag (e.g. `v0.3.0`): builds installers and attaches them to a GitHub Release,
+# then bumps latest.json (the in-app update check). Also runnable manually (workflow_dispatch).
+#
+# Desktop → Windows NSIS `.exe` + `.msi`, Linux deb/rpm/AppImage.
+# Android → signed universal `.apk`  (requires repo secrets — see the `android` job).
+# latest.json → committed to `main` so the in-app "Update available" prompt points at the new release.
 
 on:
   push:
@@ -10,7 +13,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  desktop:
     permissions:
       contents: write
     strategy:
@@ -22,36 +25,103 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-
       - uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: swatinem/rust-cache@v2
+      - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
-
       - name: Install Linux build deps
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev patchelf libasound2-dev build-essential file
-
-      - name: Install JS deps
-        run: npm ci
-
-      - name: Build app + bundle installers
-        uses: tauri-apps/tauri-action@v0
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Linux AppImage: skip strip (old linuxdeploy strip can't parse new ELF .relr.dyn) + extract-run
           NO_STRIP: "true"
           APPIMAGE_EXTRACT_AND_RUN: "1"
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Wove ${{ github.ref_name }}"
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
+
+  android:
+    needs: [desktop]   # the release already exists → just upload the APK to it
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK platform + build-tools
+        run: sdkmanager --install "platforms;android-34" "build-tools;34.0.0"
+      - uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: r27c
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - run: npm ci
+      - name: Build APK
+        env:
+          NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: npm run tauri -- android build --apk
+      - name: Sign APK
+        # Repo secrets required: WOVE_KEYSTORE_BASE64 (`base64 -w0 wove-release.jks`) + WOVE_KEYSTORE_PASSWORD
+        env:
+          KS_B64: ${{ secrets.WOVE_KEYSTORE_BASE64 }}
+          KS_PW: ${{ secrets.WOVE_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KS_B64" ]; then echo "::warning::No WOVE_KEYSTORE_BASE64 secret — skipping APK signing/upload"; exit 0; fi
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/wove.jks"
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          REL=src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+          "$BT/zipalign" -f -p 4 "$REL" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/wove.jks" --ks-key-alias wove \
+            --ks-pass "pass:$KS_PW" --key-pass "pass:$KS_PW" --out "Wove_${{ github.ref_name }}.apk" "$RUNNER_TEMP/aligned.apk"
+      - name: Upload APK to release
+        if: ${{ hashFiles('Wove_*.apk') != '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" Wove_*.apk --clobber
+
+  manifest:
+    needs: [desktop, android]
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Bump latest.json (in-app update check)
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          cat > latest.json <<JSON
+          {
+            "version": "$V",
+            "notes": "See the release notes: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}",
+            "url": "https://github.com/${{ github.repository }}/releases/latest"
+          }
+          JSON
+          git config user.name "williamkiddy"
+          git config user.email "hei.s.fue@gmail.com"
+          git add latest.json
+          git diff --cached --quiet || git commit -m "chore: latest.json → ${{ github.ref_name }}"
+          git push origin main

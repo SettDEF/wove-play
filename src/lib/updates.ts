@@ -8,7 +8,7 @@ import { APP_VERSION, cmpVersion } from "./changelog";
  * Expected JSON shape:
  *   { "version": "0.2.0", "notes": "Faster scrolling, fixes", "url": "https://…/Wove-0.2.0.apk" }
  */
-export const UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/SettDEF/Wove-releases/master/latest.json";
+export const UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/SettDEF/wove-play/main/latest.json";
 
 export interface UpdateInfo { version: string; notes?: string; url: string }
 

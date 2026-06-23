@@ -1,5 +1,5 @@
 {
-  "version": "0.2.2",
-  "notes": "Player album-art loads reliably, readable text over blurred art, new spinning Ring player icon, tidier library + faster launch.",
+  "version": "0.2.3",
+  "notes": "Reliable album art (player + playlists), no more collapsed player without a cover, readable text over blurred art, and Explore map swipe-to-pan.",
   "url": "https://github.com/SettDEF/wove-play/releases/latest"
 }

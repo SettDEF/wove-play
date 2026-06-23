@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { coverArtStrict, isAndroid } from "@/lib/backend";
+import { loadCoverArt, isAndroid } from "@/lib/backend";
 import { engine } from "@/audio/engine";
 import { useSettings } from "@/store/settings";
 import { Icon } from "./Icons";
@@ -103,10 +103,10 @@ export function useCover(path?: string, gate?: React.RefObject<HTMLElement | nul
           schedule(async () => {
             try {
               let u: string | null;
-              try { u = await coverArtStrict(path); }
+              try { u = await loadCoverArt(path); }
               // A just-started track can briefly lock its art off slow storage (the very reason covers are
               // deprioritized at track start). Retry ONCE after a beat before giving up.
-              catch { await new Promise((r) => setTimeout(r, 600)); u = await coverArtStrict(path); }
+              catch { await new Promise((r) => setTimeout(r, 600)); u = await loadCoverArt(path); }
               cacheSet(path, u); resolve(u);          // a real result (art OR genuine no-art) → safe to cache
             } catch {
               resolve(null);                          // transient failure even after the retry → DON'T cache,
@@ -121,8 +121,16 @@ export function useCover(path?: string, gate?: React.RefObject<HTMLElement | nul
     };
     const el = gate?.current;
     if (el && typeof IntersectionObserver !== "undefined") {
-      // start a touch before it's on screen so the art is usually ready by the time you reach it
-      const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); startFetch(); } }, { rootMargin: "250px" });
+      // Already on/near screen at mount (e.g. opening straight into a full list — a playlist's first
+      // covers)? Fetch NOW. IntersectionObserver can miss an element that's visible the instant it's
+      // observed (it only reports CHANGES), which left those covers permanently blank. The rect check
+      // forces layout so it's reliable; only genuinely off-screen tiles wait for the observer.
+      const m = 250;
+      const r = el.getBoundingClientRect();
+      const onScreen = r.width > 0 && r.bottom > -m && r.top < (window.innerHeight || 0) + m
+        && r.right > -m && r.left < (window.innerWidth || 0) + m;
+      if (onScreen) { startFetch(); return () => { alive = false; }; }
+      const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { io.disconnect(); startFetch(); } }, { rootMargin: `${m}px` });
       io.observe(el);
       return () => { alive = false; io.disconnect(); };
     }

@@ -671,14 +671,14 @@ export async function libClear(): Promise<void> {
 
 export async function coverArt(path: string): Promise<string | null> {
   if (!hasTauri) return null;
-  try { return await coverArtStrict(path); } catch { return null; }
+  try { return await loadCoverArt(path); } catch { return null; }
 }
-/** Like {@link coverArt} but THROWS on a native/IPC error instead of swallowing it as `null`. This lets
- *  the cover cache tell a TRANSIENT failure (e.g. MediaMetadataRetriever briefly locked while a just-
- *  started track buffers off slow storage → retry) apart from a GENUINE "no embedded art" (`null`, safe
- *  to remember). Swallowing both as null cached a transient miss permanently → "the cover sometimes
- *  doesn't load in the player". */
-export async function coverArtStrict(path: string): Promise<string | null> {
+/** Fetch a track's embedded art, THROWING on a native/IPC error instead of swallowing it as `null`. This
+ *  lets the cover cache tell a TRANSIENT failure (e.g. MediaMetadataRetriever briefly locked while a
+ *  just-started track buffers off slow storage → retry) apart from a GENUINE "no embedded art" (`null`,
+ *  safe to remember). Swallowing both as null cached a transient miss permanently → "the cover sometimes
+ *  doesn't load". {@link coverArt} is the null-safe wrapper most callers want. */
+export async function loadCoverArt(path: string): Promise<string | null> {
   if (!hasTauri) return null;
   // Android SAF URIs can't be read by the desktop cover_art path — use MediaMetadataRetriever natively.
   if (path.startsWith("content://")) {

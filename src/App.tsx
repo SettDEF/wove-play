@@ -6,7 +6,7 @@ import { engine } from "@/audio/engine";
 import { useSleep } from "@/store/sleep";
 import { useTheme } from "@/store/theme";
 import { setupMediaSession, updateMediaMetadata, setPlaybackState, setPositionState } from "@/lib/mediaSession";
-import { applyDynamicColor, clearDynamicColor, dynamicColorEnabled } from "@/theme/dynamicColor";
+import { applyDynamicColor, clearDynamicColor, dynamicColorEnabled, applyBgLuminance, clearBgLuminance } from "@/theme/dynamicColor";
 // Home (the For-You feed) is heavy and NOT the launch screen (Library/Browse is) → code-split it out of
 // the initial bundle so launch parses less JS. Mounted on first open, then kept mounted (instant switch).
 const Home = lazy(() => import("@/components/Home").then((m) => ({ default: m.Home })));
@@ -239,7 +239,7 @@ export function App() {
   // Material-You dynamic color + OS media-session metadata from the current track's album art.
   useEffect(() => {
     const track = usePlayer.getState().current();
-    if (!currentPath || !track) { clearDynamicColor(); return; }
+    if (!currentPath || !track) { clearDynamicColor(); clearBgLuminance(); return; }
     usePlayer.getState().resolveSongEq(track); // per-song pinned EQ / AutoEq → base EQ
     // Push title/artist/duration to the OS notification IMMEDIATELY so the notification updates with zero
     // delay — DON'T wait for the cover to decode (slow on SD). The artwork fills in when it resolves.
@@ -248,6 +248,7 @@ export function App() {
     coverArt(currentPath).then((url) => {
       if (!alive) return;
       if (dynamicColorEnabled()) applyDynamicColor(url, track.id); else clearDynamicColor();
+      applyBgLuminance(url, track.id); // tag root light/dark so list text stays readable over the blurred art
       if (url) updateMediaMetadata(track, url); // now add the artwork
     });
     return () => { alive = false; };

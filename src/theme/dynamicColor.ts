@@ -124,6 +124,46 @@ export function clearDynamicColor(): void {
   useTheme.getState().apply();
 }
 
+// ── adaptive text contrast over the blurred-art background ──────────────────────────────────────────
+// The blurred backdrop IS the current cover, so list text sits on it and washed out over bright covers.
+// Reuse the same canvas read to measure the cover's mean perceptual luminance and tag the root
+// light/dark — CSS then flips the list text COLOUR (no text-shadow). Cached per track id like the accent.
+const lumCache = new Map<string, number>();
+function setLum(lum: number): void {
+  const root = document.documentElement;
+  root.dataset.bgLum = lum > 0.6 ? "light" : "dark"; // bright cover → dark text; dark cover → light text
+}
+export function applyBgLuminance(dataUrl: string | null | undefined, id?: string): void {
+  if (typeof document === "undefined") return;
+  if (!dataUrl) { clearBgLuminance(); return; }
+  if (id) { const c = lumCache.get(id); if (c !== undefined) { setLum(c); return; } }
+  const img = new Image();
+  img.decoding = "async";
+  img.onload = () => {
+    try {
+      const N = 32;
+      const cv = document.createElement("canvas"); cv.width = N; cv.height = N;
+      const ctx = cv.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, N, N);
+      const { data } = ctx.getImageData(0, 0, N, N);
+      let sum = 0, n = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 8) continue;
+        sum += (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255; // sRGB luma 0..1
+        n++;
+      }
+      const lum = n ? sum / n : 0;
+      if (id) { if (lumCache.size > 600) lumCache.clear(); lumCache.set(id, lum); }
+      setLum(lum);
+    } catch { /* leave the current tag */ }
+  };
+  img.src = dataUrl;
+}
+export function clearBgLuminance(): void {
+  if (typeof document !== "undefined") delete document.documentElement.dataset.bgLum;
+}
+
 const PREF = "wavrplay-dyncolor";
 export function dynamicColorEnabled(): boolean {
   try { return localStorage.getItem(PREF) !== "0"; } catch { return true; }

@@ -384,7 +384,12 @@ export function ExploreMap({ library, onOpen }: { library: Track[]; onOpen: (tit
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current; if (!d || pinch.current) return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
-    if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true;
+    // Once it's a real drag, CAPTURE the pointer so the whole pan stays with the map — a fast/long swipe
+    // can't slip out to a parent (which would otherwise read it as a tab swipe) or drop mid-gesture.
+    if (!d.moved && Math.abs(dx) + Math.abs(dy) > 4) {
+      d.moved = true;
+      try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* unsupported */ }
+    }
     viewRef.current = clamp({ ...viewRef.current, x: d.vx + dx, y: d.vy + dy });
     applyTransform(); commitIfWindowChanged();
   };
@@ -411,8 +416,11 @@ export function ExploreMap({ library, onOpen }: { library: Track[]; onOpen: (tit
     applyTransform(); commitIfWindowChanged(); if (anim) setView({ ...viewRef.current });
   };
   const setZoom = (z: number) => zoomAt(vp.w / 2, vp.h / 2, z);
-  const onTouchStart = (e: React.TouchEvent) => { if (e.touches.length === 2) { noAnim(); pinch.current = { d: dist(e.touches), z: viewRef.current.z }; } };
-  const onTouchMove = (e: React.TouchEvent) => { if (e.touches.length === 2 && pinch.current) setZoom(pinch.current.z * (dist(e.touches) / pinch.current.d)); };
+  // Keep ALL map touches from bubbling to the library's tab-swipe handler — the map owns its gestures
+  // (pan via pointer events, pinch here). Without this a one-finger drag on the map reached the parent
+  // and flipped to the next sub-tab instead of panning.
+  const onTouchStart = (e: React.TouchEvent) => { e.stopPropagation(); if (e.touches.length === 2) { noAnim(); pinch.current = { d: dist(e.touches), z: viewRef.current.z }; } };
+  const onTouchMove = (e: React.TouchEvent) => { e.stopPropagation(); if (e.touches.length === 2 && pinch.current) setZoom(pinch.current.z * (dist(e.touches) / pinch.current.d)); };
   const onTouchEnd = (e: React.TouchEvent) => { if (e.touches.length < 2) { pinch.current = null; setView({ ...viewRef.current }); } };
   const onWheel = (e: React.WheelEvent) => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); setZoom(viewRef.current.z - e.deltaY * 0.0015); };
   const zoomBtn = (d: number) => { if (canvasRef.current) canvasRef.current.style.transition = "transform .16s ease-out"; setZoom(+(viewRef.current.z + d).toFixed(2)); setView({ ...viewRef.current }); };

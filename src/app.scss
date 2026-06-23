@@ -1381,8 +1381,11 @@ img { -webkit-user-drag: none; }
    shrinks but stays square. bigArt opts out (fills, by design). */
 .wp-np-stage { flex: 1; }
 .wp-np-stage:not(.wp-np-stage-big) {
+  /* WIDTH-bound square (was width/height:auto, which took its size from the <img> — so with no cover the
+     stage collapsed to 0: no DNA glyph + the timeline jumped to the top). Width-bound holds the square
+     whatever the content is; capping max-width at 46vh keeps it ≤ that tall (square). */
   flex: 0 1 auto; min-height: 0; aspect-ratio: 1 / 1;
-  width: auto; height: auto; max-width: 100%; max-height: 46vh; align-self: center;
+  width: 100%; height: auto; max-width: min(100%, 46vh); align-self: center;
 }
 /* lyrics read better full-width than square → restore a wide box for the lyrics view */
 .wp-np-stage-lyrics:not(.wp-np-stage-big) { aspect-ratio: auto; width: 100%; height: 38vh; max-height: 38vh; }
@@ -1390,7 +1393,8 @@ img { -webkit-user-drag: none; }
    only; the landscape media queries keep their own height-bound square.) */
 @media (orientation: portrait) {
   .wp-np-stage-big:not(.wp-np-stage-lyrics) {
-    flex: 0 1 auto; aspect-ratio: 1 / 1; width: auto; height: auto; max-width: 100%; max-height: 62vh; align-self: center;
+    /* width-bound square (see above) so big art holds its box with no cover too */
+    flex: 0 1 auto; aspect-ratio: 1 / 1; width: 100%; height: auto; max-width: min(100%, 62vh); align-self: center;
   }
 }
 /* stage shapes */
@@ -2085,19 +2089,23 @@ img { -webkit-user-drag: none; }
    floating tab dock is gone). Kept in the DOM so toggling it back later is a one-line change. */
 .wp-appbg-scrim { position: absolute; inset: 0; background: transparent; }
 :root[data-theme="light"] .wp-appbg-scrim { background: transparent; }
-/* Legibility over the blurred art: list/tile text sits directly on the artwork, so over BRIGHT album art
-   it washed out. A soft contrast halo (text-shadow inherits to every child line) keeps titles + subtitles
-   readable over ANY artwork without dimming the art itself. Halo is dark in dark theme (light text), light
-   in light theme (dark text). Only applied when the blurred background is actually on. */
-:root[data-appbg="blur"] .wp-row-text,
-:root[data-appbg="blur"] .wp-tile-title,
-:root[data-appbg="blur"] .wp-song-tile-title {
-  text-shadow: 0 1px 3px rgba(0, 0, 0, .72), 0 0 2px rgba(0, 0, 0, .55);
+/* Legibility over the blurred art: list/tile text sits directly on the artwork. Rather than a shadow, we
+   flip the text COLOUR from the cover's analysed luminance (root[data-bg-lum], see applyBgLuminance) —
+   a bright cover gets dark text, a dark cover keeps light text. Scoped to the over-art list containers
+   so sheets/cards (their own background) are untouched; active/selected rows keep their pill colour. */
+:root[data-appbg="blur"][data-bg-lum="light"] {
+  .wp-vlist, .wp-list, .wp-sec-rows, .wp-sec-grid {
+    .wp-row-text, .wp-tile-title, .wp-song-tile-title { color: #15120e; }
+    .wp-muted { color: rgba(21, 18, 14, .64); }
+    .wp-row-active .wp-row-text, .wp-row-active .wp-tile-title, .wp-row-active .wp-muted { color: var(--md-on-secondary-container); }
+  }
 }
-:root[data-theme="light"][data-appbg="blur"] .wp-row-text,
-:root[data-theme="light"][data-appbg="blur"] .wp-tile-title,
-:root[data-theme="light"][data-appbg="blur"] .wp-song-tile-title {
-  text-shadow: 0 1px 3px rgba(255, 255, 255, .85), 0 0 2px rgba(255, 255, 255, .7);
+:root[data-appbg="blur"][data-bg-lum="dark"] {
+  .wp-vlist, .wp-list, .wp-sec-rows, .wp-sec-grid {
+    .wp-row-text, .wp-tile-title, .wp-song-tile-title { color: #f4f1ec; }
+    .wp-muted { color: rgba(244, 241, 236, .66); }
+    .wp-row-active .wp-row-text, .wp-row-active .wp-tile-title, .wp-row-active .wp-muted { color: var(--md-on-secondary-container); }
+  }
 }
 /* On the player, this full-window backdrop fills the strip behind the floating nav (the player's own
    backdrop is clipped to the content area). Match the player backdrop's blur/saturation EXACTLY so the

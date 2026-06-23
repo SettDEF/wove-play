@@ -1,11 +1,17 @@
 /** Single source of truth for the app version + changelog (shown in Settings AND the launch "What's new"
  *  popup). Bump APP_VERSION + add a CHANGELOG entry on every release — the popup auto-shows it once. */
 
-export const APP_VERSION = "0.2.2"; // keep in sync with package.json + tauri.conf.json
+export const APP_VERSION = "0.2.3"; // keep in sync with package.json + tauri.conf.json
 
 export interface ChangelogEntry { v: string; date: string; notes: string[] }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { v: "0.2.3", date: "Jun 2026", notes: [
+    "Album art loads reliably now — in the player AND in playlists/lists (a brief read at track start retries, and on-screen covers fetch immediately instead of staying blank)",
+    "The player no longer collapses when a track has no cover — the Sound-DNA glyph fills the artwork square and the timeline stays in place",
+    "Text stays readable over the blurred-art background — it adapts light/dark to the cover instead of washing out",
+    "Explore map: swiping now pans the map instead of jumping to the next tab (pinch-zoom still works)",
+  ] },
   { v: "0.2.2", date: "Jun 2026", notes: [
     "Album art that sometimes wouldn’t load in the player now loads reliably (a brief read at track start retries instead of going blank)",
     "Text stays readable over the blurred-art background, even on bright covers",

@@ -4,6 +4,13 @@ All notable changes to Wove. This mirrors the in-app **What's new** screen
 (source of truth: `src/lib/changelog.ts`). Latest release builds are on the
 [Releases page](https://github.com/SettDEF/wove-play/releases).
 
+## 0.2.3 — Jun 2026
+
+- Album art loads reliably now — in the player AND in playlists/lists (a brief read at track start retries, and on-screen covers fetch immediately instead of staying blank)
+- The player no longer collapses when a track has no cover — the Sound-DNA glyph fills the artwork square and the timeline stays in place
+- Text stays readable over the blurred-art background — it adapts light/dark to the cover instead of washing out
+- Explore map: swiping now pans the map instead of jumping to the next tab (pinch-zoom still works)
+
 ## 0.2.2 — Jun 2026
 
 - Album art that sometimes wouldn't load in the player now loads reliably (a brief read at track start retries instead of going blank)

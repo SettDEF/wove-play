@@ -43,6 +43,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             analysis::track_analysis,
             analysis::analyze_track,
+            analysis::track_waveform,
             analysis::analyze_tracks,
             analysis::endless_set,
             analysis::dj_set,

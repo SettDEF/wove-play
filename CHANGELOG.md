@@ -4,6 +4,16 @@ All notable changes to Wove. This mirrors the in-app **What's new** screen
 (source of truth: `src/lib/changelog.ts`). Latest release builds are on the
 [Releases page](https://github.com/SettDEF/wove-play/releases).
 
+## 0.2.1 — Jun 2026
+
+- New optional "Waveform" seek style — a real, on-device waveform that loads when you pick it (Settings → Look)
+- Browse: more categories (Never Played, Shuffle All) + fixed the Low Rated icon
+- For You: the "Sounds like" mixes now sit in a tidy grid on desktop / swipe carousel on phone
+- Smoother back-swipe (the screen shrinks away while the previous one grows in)
+- Library: folder / add / reindex tucked into a ⋯ menu for a cleaner header
+- Crisper, centered app icon
+- Fixes: album art not loading in the player on Android, and more
+
 ## 0.2.0 — Jun 2026
 
 - Desktop media controls (MPRIS): cover, title & playback buttons in your system tray / lock screen

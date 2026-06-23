@@ -971,6 +971,17 @@ img { -webkit-user-drag: none; }
 .wp-library { display: flex; flex-direction: column; overflow: hidden; }
 .wp-lib-controls { display: flex; gap: 8px; flex-wrap: wrap; padding-bottom: 8px; flex-shrink: 0; }
 /* ONE horizontally-scrolling row of library tabs (swipe or tap). No wrap; hidden scrollbar. */
+/* Tab row + a pinned overflow (⋯) button that holds the folder/add/reindex actions in a popover, so the
+   top header stays clean. The row scrolls; the ⋯ button stays put on the right. */
+.wp-tabs-bar { display: flex; align-items: center; gap: 4px; }
+.wp-tabs-bar .wp-tabs-row { flex: 1; min-width: 0; }
+.wp-libmenu-wrap { position: relative; flex-shrink: 0; align-self: flex-start; }
+.wp-libmenu {
+  position: absolute; right: 0; top: calc(100% + 2px); z-index: 40; min-width: 210px;
+  background: var(--md-surface-container-high); border: 1px solid color-mix(in srgb, var(--md-outline-variant) 70%, transparent);
+  border-radius: 14px; padding: 6px; display: flex; flex-direction: column; gap: 2px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.34); animation: wpFade .12s ease;
+}
 .wp-tabs-row {
   display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; flex-shrink: 0;
   padding: 2px 0 8px; scrollbar-width: none; scroll-behavior: smooth; -webkit-overflow-scrolling: touch;
@@ -1913,6 +1924,24 @@ img { -webkit-user-drag: none; }
 .wp-feature {
   background: var(--md-surface-container-high); border: 1px solid var(--md-outline-variant);
   border-radius: 20px; padding: 14px; display: flex; flex-direction: column; gap: 8px;
+}
+/* "Sounds like" / featured mix cards: a horizontal swipe carousel on phones, a multi-column GRID on
+   desktop (so they don't stretch full-width and look sparse). */
+.wp-feature-lane {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 86%; gap: 12px;
+  overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; padding-bottom: 4px;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.wp-feature-lane::-webkit-scrollbar { display: none; }
+.wp-feature-lane > .wp-feature { scroll-snap-align: start; height: 100%; }
+/* Any WIDE window (desktop portrait OR landscape) → a multi-column grid of narrower cards, not the
+   full-width carousel. Width-only query so it also catches wide landscape (the `desktop` mixin is
+   portrait-only). Phones in portrait stay below 760px → keep the swipe carousel. */
+@media (min-width: 760px) {
+  .wp-feature-lane {
+    grid-auto-flow: row; grid-auto-columns: auto;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); overflow: visible;
+  }
 }
 .wp-feature-head { display: flex; align-items: center; gap: 12px; }
 .wp-feature-head .wp-mosaic { width: 72px; height: 72px; flex-shrink: 0; }

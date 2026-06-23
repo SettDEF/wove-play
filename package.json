@@ -1,6 +1,6 @@
 {
   "name": "wavr-play",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Wove — a Material 3, local-first music player with an audio-reactive visualizer, parametric EQ and on-device taste mixes. Desktop + Android (Tauri 2).",
   "license": "GPL-3.0-or-later",
   "type": "module",

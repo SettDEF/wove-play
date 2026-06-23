@@ -1,11 +1,20 @@
 /** Single source of truth for the app version + changelog (shown in Settings AND the launch "What's new"
  *  popup). Bump APP_VERSION + add a CHANGELOG entry on every release — the popup auto-shows it once. */
 
-export const APP_VERSION = "0.2.0"; // keep in sync with package.json + tauri.conf.json
+export const APP_VERSION = "0.2.1"; // keep in sync with package.json + tauri.conf.json
 
 export interface ChangelogEntry { v: string; date: string; notes: string[] }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { v: "0.2.1", date: "Jun 2026", notes: [
+    "New optional “Waveform” seek style — a real, on-device waveform that loads when you pick it (Settings → Look)",
+    "Browse: more categories (Never Played, Shuffle All) + fixed the Low Rated icon",
+    "For You: the “Sounds like” mixes now sit in a tidy grid on desktop / swipe carousel on phone",
+    "Smoother back-swipe (the screen shrinks away while the previous one grows in)",
+    "Library: folder / add / reindex tucked into a ⋯ menu for a cleaner header",
+    "Crisper, centered app icon",
+    "Fixes: album art not loading in the player on Android, and more",
+  ] },
   { v: "0.2.0", date: "Jun 2026", notes: [
     "Desktop media controls (MPRIS): cover, title & playback buttons in your system tray / lock screen",
     "New UI-zoom control — scale the whole interface to fit HiDPI displays (Ctrl +/−/0)",

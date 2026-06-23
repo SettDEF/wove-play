@@ -16,7 +16,7 @@ import { CrossArt } from "./CrossArt";
 import { ArtistLinks } from "./ArtistLinks";
 import { SectionStrip } from "./SectionStrip";
 import { analyzeTrack, peekAnalysis, type TrackAnalysis, type Section } from "@/lib/trackAnalysis";
-import { fileUrl, hasTauri, isWebkitGtk, analyzeTrackNative, openUrl, type NativeAnalysis } from "@/lib/backend";
+import { fileUrl, hasTauri, isWebkitGtk, analyzeTrackNative, waveformNative, openUrl, type NativeAnalysis } from "@/lib/backend";
 import { engine } from "@/audio/engine";
 import { sampleLive, liveSections } from "@/lib/liveSections";
 import { useMixId, detectMix } from "@/store/mixId";
@@ -45,6 +45,7 @@ type View = "art" | "viz" | "lyrics";
 // Native analysis per track id, kept ACROSS player open/close (the component unmounts on tab switch).
 // Without this the sections re-fetched + flashed empty every time you re-entered the player.
 const natCache = new Map<string, NativeAnalysis | null>();
+const wavePeaksCache = new Map<string, number[]>(); // desktop real waveform peaks per track id (survives unmount)
 const EMPTY_SECS: Section[] = []; // stable ref so the mixId selector doesn't churn renders
 
 export function NowPlaying() {
@@ -83,9 +84,11 @@ export function NowPlaying() {
   const [analysis, setAnalysis] = useState<TrackAnalysis | null>(() => (t ? peekAnalysis(t.id) ?? null : null));
   // Native analysis (Analysis v2): genre-robust BPM + Camelot key, cached on disk + in natCache.
   const [nat, setNat] = useState<NativeAnalysis | null>(() => (t ? natCache.get(t.id) ?? null : null));
+  // Desktop (webkit2gtk) real waveform peaks for the segment bars (the webview decode is skipped there).
+  const [natPeaks, setNatPeaks] = useState<number[] | null>(() => (t ? wavePeaksCache.get(t.id) ?? null : null));
   useEffect(() => {
     const cur = usePlayer.getState().current();
-    if (!cur || !hasTauri) { setAnalysis(null); setNat(null); return; }
+    if (!cur || !hasTauri) { setAnalysis(null); setNat(null); setNatPeaks(null); return; }
     let alive = true;
     let skipped = false; // skip-intro fires once, from whichever analyzer resolves first
     // Skip-intro from the native sections (only ever near a track's start, so re-opening mid-track is safe).
@@ -115,6 +118,7 @@ export function NowPlaying() {
     setAnalysis(cachedAna ?? null);
     let idleId = 0;
     let timer = 0;
+    setNatPeaks(wavePeaksCache.get(cur.id) ?? null); // seed from cache; the fetch is opt-in (Waveform style only)
     // webkit2gtk (Linux desktop) blocks the main thread for SECONDS on decodeAudioData of a whole file —
     // the 10s player stall the lag monitor caught. Skip the webview waveform analysis there; the seekbar
     // falls back to the cheap synthetic WaveSeek and the native pass still drives BPM/key/sections.
@@ -142,6 +146,19 @@ export function NowPlaying() {
     }
     return () => { alive = false; if (natTimer) clearTimeout(natTimer); if (timer) clearTimeout(timer); if (idleId && typeof cancelIdleCallback === "function") cancelIdleCallback(idleId); };
   }, [t?.id]);
+
+  // Real waveform peaks for the "Waveform" seek style ONLY — fetched natively (off the GTK main thread)
+  // and IMMEDIATELY when that style is selected (or the track changes). The default "sections" + the other
+  // styles are untouched, so the native waveform is purely opt-in. Desktop only (Android already has peaks).
+  useEffect(() => {
+    const cur = t;
+    if (!cur || !hasTauri || seekStyle !== "waveform" || !isWebkitGtk) return;
+    const hit = wavePeaksCache.get(cur.id);
+    if (hit) { setNatPeaks(hit); return; }
+    let alive = true;
+    void waveformNative(cur.path, 480).then((p) => { if (alive && p?.length) { wavePeaksCache.set(cur.id, p); setNatPeaks(p); } });
+    return () => { alive = false; };
+  }, [t?.id, seekStyle]);
   // Phase 2 — LIVE sections: while a track plays, fold the analyser's energy into a provisional
   // structure map (shown until the precise pass lands). Cheap: one freq read every 300ms.
   useEffect(() => {
@@ -413,7 +430,7 @@ export function NowPlaying() {
         <button className="md-icon-btn" title="More" onClick={() => setActions(true)}><Icon name="more" /></button>
       </div>
 
-      <NpSeek analysis={analysis} seekStyle={seekStyle} sections={shownSections} nat={nat}
+      <NpSeek analysis={analysis} natPeaks={natPeaks} seekStyle={seekStyle} sections={shownSections} nat={nat}
         loop={loop} setLoop={setLoop} seek={seek} onExpand={() => setSecEdit(true)} seed={t.id}
         duration={duration} showBpm={showBpm} bpm={bpm} endless={endless} upcoming={upcoming} />
 
@@ -534,8 +551,9 @@ export function NowPlaying() {
 /** The position-driven part of the player (seekbar + section strip + time/BPM row), split out so it
  *  can subscribe to `position` — which ticks several times a second — WITHOUT re-rendering the whole
  *  (large) Now-Playing screen on every tick. Only this small subtree repaints per tick. [perf P0] */
-function NpSeek({ analysis, seekStyle, sections, nat, loop, setLoop, seek, onExpand, seed, duration, showBpm, bpm, endless, upcoming }: {
+function NpSeek({ analysis, natPeaks, seekStyle, sections, nat, loop, setLoop, seek, onExpand, seed, duration, showBpm, bpm, endless, upcoming }: {
   analysis: TrackAnalysis | null;
+  natPeaks: number[] | null;
   seekStyle: "sections" | "waveform" | "slider" | "wavy";
   sections: Section[];
   nat: NativeAnalysis | null;
@@ -579,8 +597,8 @@ function NpSeek({ analysis, seekStyle, sections, nat, loop, setLoop, seek, onExp
       <div className="wp-np-seek-bar">
         {seekStyle === "wavy"
           ? <SquiggleSeek value={position} max={duration || 1} onChange={seek} playing={playing} amp={waveAmp} speed={waveSpeed} />
-          : analysis && seekStyle !== "slider"
-          ? <SongSeek value={position} max={duration || 1} peaks={analysis.peaks} wave={analysis.wave} sections={shown} sectionTint={seekStyle === "sections"} onChange={seek} bpm={nat?.bpm} firstBeat={nat?.first_beat} loop={loop} onLoop={setLoop} onExpand={onExpand} liveZoom zoom={zoom} offset={offset} onToggleZoom={() => setZoomed((z) => !z)} />
+          : (analysis?.peaks?.length || (seekStyle === "waveform" && natPeaks?.length)) && seekStyle !== "slider"
+          ? <SongSeek value={position} max={duration || 1} peaks={analysis?.peaks ?? natPeaks ?? []} wave={analysis?.wave} sections={shown} sectionTint={seekStyle === "sections"} onChange={seek} bpm={nat?.bpm} firstBeat={nat?.first_beat} loop={loop} onLoop={setLoop} onExpand={onExpand} liveZoom zoom={zoom} offset={offset} onToggleZoom={() => setZoomed((z) => !z)} />
           : seekStyle !== "slider"
             ? <WaveSeek value={position} max={duration || 1} seed={seed} onChange={seek} />
             : <Seekbar value={position} max={duration || 1} onChange={seek} height={6} />}

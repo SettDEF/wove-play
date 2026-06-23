@@ -96,17 +96,23 @@ export function SongSeek({
         ctx.restore();
       }
     } else {
-      // fallback: coarse squared bars from `peaks`
-      const n = peaks.length, bw = w / n;
+      // Bars whose COUNT follows the pixel width (one every ~5px) and whose heights are RESAMPLED from
+      // `peaks` (peak value per slice). So the bars re-fit + re-height live as the window resizes, AND
+      // they refine in place the moment a higher-resolution analysis lands. [waveform live refine + resize]
+      const P = peaks.length;
+      const pitch = 5;                                   // px per bar (bar + gap)
+      const n = Math.max(8, Math.round(w / pitch));
+      const barW = w / n;
       for (let i = 0; i < n; i++) {
-        const f = (i + 0.5) / n;
-        if (f < win0 || f > win0 + winSpan) continue;
-        const x = ((f - win0) / winSpan) * w;
-        const bh = Math.max(1.5, peaks[i] * peaks[i] * (height - 3)), y = (height - bh) / 2;
+        const f = win0 + ((i + 0.5) / n) * winSpan;      // track fraction at this bar (respects zoom window)
+        const a = Math.max(0, Math.floor((win0 + (i / n) * winSpan) * P));
+        const b = Math.min(P, Math.max(a + 1, Math.ceil((win0 + ((i + 1) / n) * winSpan) * P)));
+        let amp = 0; for (let k = a; k < b; k++) { const v = peaks[k] ?? 0; if (v > amp) amp = v; } // peak in slice
+        const bh = Math.max(1.5, amp * amp * (height - 3)), y = (height - bh) / 2;
         const played = f <= pct;
         ctx.fillStyle = played ? primary : muted;
         ctx.globalAlpha = played ? (sectionTint ? 0.45 + tierFrac(f) * 0.275 : 0.9) : 0.30;
-        ctx.fillRect(x, y, Math.max(1, (bw * z) - (bw * z > 2.4 ? 0.7 : 0)), bh);
+        ctx.fillRect(i * barW, y, Math.max(1, barW - 1), bh);
       }
     }
     ctx.globalAlpha = 1;

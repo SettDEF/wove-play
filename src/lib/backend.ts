@@ -75,6 +75,17 @@ export async function analyzeTrackNative(path: string): Promise<NativeAnalysis |
   }
 }
 
+/** Real downsampled waveform peaks (0..1) computed natively (off the GTK main thread) → drives the
+ *  segment-bar seekbar on Linux desktop, where the webview full-file decode is skipped (it stalled). */
+export async function waveformNative(path: string, buckets = 480): Promise<number[] | null> {
+  if (!hasTauri) return null;
+  try {
+    return await invoke<number[]>("track_waveform", { path, buckets });
+  } catch {
+    return null;
+  }
+}
+
 /** Background-analyze a batch of paths (skips cached); streams {done,total}. Returns count newly analyzed. */
 export async function analyzeTracksNative(
   paths: string[],

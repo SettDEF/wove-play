@@ -195,8 +195,7 @@ function FeaturedMix({ name, sub, tracks, onFlow }: { name: string; sub: string;
   if (tracks.length < 3) return null;
   const play = (i: number) => usePlayer.getState().playFrom(tracks, i);
   return (
-    <section className="wp-shelf">
-      <div className="wp-feature">
+    <div className="wp-feature">
         <div className="wp-feature-head">
           <Mosaic reps={tracks.slice(0, 4).map((t) => t.path)} />
           <div className="wp-row-text">
@@ -214,8 +213,7 @@ function FeaturedMix({ name, sub, tracks, onFlow }: { name: string; sub: string;
           <button className="wp-feature-play" onClick={() => play(0)} title={`Play ${name}`}><Icon name="play" size={22} color="var(--md-on-primary)" /></button>
           {onFlow && <button className="wp-feature-flow" onClick={onFlow} title="Play as a beatmatched flow"><Icon name="allInclusive" size={20} /></button>}
         </div>
-      </div>
-    </section>
+    </div>
   );
 }
 
@@ -482,8 +480,14 @@ export function Home() {
           <ArtCard name={fy.because.seed} sub={`${fy.because.tracks.length} songs`} reps={reps(fy.because.tracks)} onPlay={() => playTracks(fy.because!.tracks)} />
         </Shelf>
       )}
-      {fusion.map((f) => <FeaturedMix key={f.seed.id} name={`Sounds like ${f.seed.title}`} sub="Matched by on-device audio analysis · tap ∞ for radio" tracks={[f.seed, ...f.tracks]}
-        onFlow={hasTauri ? () => usePlayer.getState().startEndlessSet(f.seed, [f.seed, ...f.tracks]) : undefined} />)}
+      {fusion.length > 0 && (
+        <section className="wp-shelf">
+          <div className="wp-feature-lane">
+            {fusion.map((f) => <FeaturedMix key={f.seed.id} name={`Sounds like ${f.seed.title}`} sub="Matched by on-device audio analysis · tap ∞ for radio" tracks={[f.seed, ...f.tracks]}
+              onFlow={hasTauri ? () => usePlayer.getState().startEndlessSet(f.seed, [f.seed, ...f.tracks]) : undefined} />)}
+          </div>
+        </section>
+      )}
       <TrackShelf title="Jump back in" sub="Recently played" tracks={fy.recentlyPlayed} onSeeAll={openSeeAll} />
       <TrackShelf title="Fresh & familiar" sub="New picks + old favorites" tracks={fy.freshFamiliar} onSeeAll={openSeeAll} />
       {fy.topGenres.slice(0, 3).map((g) => (
@@ -544,7 +548,9 @@ export function Home() {
         </Shelf>
       )}
 
-      {fy.forgotten.length >= 3 && <FeaturedMix name="Forgotten favorites" sub="You haven't heard these in a while" tracks={fy.forgotten} />}
+      {fy.forgotten.length >= 3 && (
+        <section className="wp-shelf"><div className="wp-feature-lane"><FeaturedMix name="Forgotten favorites" sub="You haven't heard these in a while" tracks={fy.forgotten} /></div></section>
+      )}
 
       {fy.topArtists.length > 0 && (
         <Shelf title="Your top artists" sub="Most-played in your library">

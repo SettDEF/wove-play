@@ -44,7 +44,7 @@ export function EdgeBack() {
     // Reset specific nodes (captured per-gesture) so a pending settle from a previous swipe never touches
     // the element a NEW swipe is driving.
     const resetEl = (el: HTMLElement | null, pk: HTMLElement | null) => {
-      if (el) { el.style.transform = ""; el.style.transition = ""; el.style.boxShadow = ""; el.style.willChange = ""; }
+      if (el) { el.style.transform = ""; el.style.transition = ""; el.style.boxShadow = ""; el.style.willChange = ""; el.style.transformOrigin = ""; }
       if (pk) pk.remove();
     };
 
@@ -77,11 +77,17 @@ export function EdgeBack() {
       if (!target) return;
       const x = Math.max(0, dx);
       const frac = Math.min(1, x / w);
-      target.style.transform = `translate3d(${x}px,0,0)`;
+      // Front pane: slide right AND shrink (depth) — it reads as the current screen shrinking away.
+      target.style.transformOrigin = "center center";
+      target.style.transform = `translate3d(${x}px,0,0) scale(${1 - frac * 0.12})`;
       target.style.boxShadow = "-16px 0 38px rgba(0,0,0,.4)";
-      // Destination parallax: starts shifted ~18% to the left and eases to 0 as you pull across — so it
-      // reads as the previous window coming in, and it's brightest (most "arrived") near the commit point.
-      if (peek) { peek.style.transform = `translate3d(${(frac - 1) * w * 0.18}px,0,0)`; peek.style.opacity = String(0.55 + frac * 0.45); }
+      // Destination: enters from the LEFT (~18% parallax) and scales UP from 0.9 → 1 as you pull across —
+      // so the previous screen reads as coming forward, brightest (most "arrived") near the commit point.
+      if (peek) {
+        peek.style.transformOrigin = "center center";
+        peek.style.transform = `translate3d(${(frac - 1) * w * 0.18}px,0,0) scale(${0.9 + frac * 0.1})`;
+        peek.style.opacity = String(0.55 + frac * 0.45);
+      }
       e.preventDefault(); // claim the gesture from horizontal page scroll
     };
     const finish = (e: TouchEvent) => {
@@ -96,12 +102,12 @@ export function EdgeBack() {
       el.style.transition = ease;
       if (pk) pk.style.transition = ease;
       if (commit) {
-        el.style.transform = `translate3d(${w}px,0,0)`;
-        if (pk) { pk.style.transform = "translate3d(0,0,0)"; pk.style.opacity = "1"; }
+        el.style.transform = `translate3d(${w}px,0,0) scale(0.88)`;
+        if (pk) { pk.style.transform = "translate3d(0,0,0) scale(1)"; pk.style.opacity = "1"; }
         settleTimer = window.setTimeout(() => { settleTimer = 0; resetEl(el, pk); goBack(); }, 200); // reset BEFORE back (el may stay mounted, e.g. a tab)
       } else {
-        el.style.transform = "translate3d(0,0,0)";
-        if (pk) pk.style.opacity = "0";
+        el.style.transform = "translate3d(0,0,0) scale(1)";
+        if (pk) { pk.style.transform = `translate3d(${-w * 0.18}px,0,0) scale(0.9)`; pk.style.opacity = "0"; }
         settleTimer = window.setTimeout(() => { settleTimer = 0; resetEl(el, pk); }, 240);
       }
     };

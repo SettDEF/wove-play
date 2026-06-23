@@ -93,6 +93,45 @@ pub async fn analyze_track(cache: State<'_, AnalysisCache>, path: String) -> Res
     Ok(a)
 }
 
+/// Downsampled waveform peaks (max-abs per bucket, normalised 0..1) for the SEGMENT-bar seekbar. Runs
+/// off the GTK main thread (native decode) so the Linux desktop gets REAL bar heights without the
+/// webview `decodeAudioData` stall that forced the synthetic fallback there. `buckets` ≈ on-screen bars.
+#[tauri::command]
+pub async fn track_waveform(path: String, buckets: usize) -> Result<Vec<f32>, String> {
+    let n = buckets.clamp(32, 2000);
+    let (samples, _sr) = decode_mono(&path).ok_or_else(|| "decode failed".to_string())?;
+    if samples.is_empty() {
+        return Err("empty".into());
+    }
+    let per = (samples.len() / n).max(1);
+    let mut out: Vec<f32> = Vec::with_capacity(n);
+    let mut max = 0f32;
+    for i in 0..n {
+        let a = i * per;
+        let b = ((i + 1) * per).min(samples.len());
+        if a >= b {
+            break;
+        }
+        let mut peak = 0f32;
+        for &s in &samples[a..b] {
+            let v = s.abs();
+            if v > peak {
+                peak = v;
+            }
+        }
+        out.push(peak);
+        if peak > max {
+            max = peak;
+        }
+    }
+    if max > 0.0 {
+        for v in out.iter_mut() {
+            *v /= max;
+        }
+    }
+    Ok(out)
+}
+
 /// Build an **Endless Set** (beatmatched/key-aware auto-DJ) over the given track
 /// paths, using ONLY tracks already analyzed (fresh in the cache). `start` (a path)
 /// anchors the first track; `overlap_beats` is the desired crossfade length. The

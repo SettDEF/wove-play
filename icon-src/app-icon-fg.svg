@@ -6,6 +6,7 @@
       <stop offset="1" stop-color="#f3c869"/>
     </linearGradient>
   </defs>
-  <path d="M208,360 C258,548 304,648 352,712 C400,628 438,558 472,484 C506,558 544,628 592,712 C640,648 686,548 734,360 C760,470 786,494 824,452"
+  <!-- centered (bbox ~516,536) + scaled into the adaptive safe-zone (~66% of the 108dp canvas) -->
+  <path transform="translate(512 512) scale(0.66) translate(-516 -536)" d="M208,360 C258,548 304,648 352,712 C400,628 438,558 472,484 C506,558 544,628 592,712 C640,648 686,548 734,360 C760,470 786,494 824,452"
         fill="none" stroke="url(#g)" stroke-width="96" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

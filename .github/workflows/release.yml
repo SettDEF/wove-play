@@ -22,6 +22,7 @@ jobs:
         include:
           - os: windows-latest   # → Wove_x.y.z_x64-setup.exe (NSIS) + .msi
           - os: ubuntu-22.04     # → .deb / .rpm / .AppImage
+          - os: macos-latest     # → .dmg / .app (universal)
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -125,3 +126,40 @@ jobs:
           git add latest.json
           git diff --cached --quiet || git commit -m "chore: latest.json → ${{ github.ref_name }}"
           git push origin main
+
+  # iOS — can ONLY build on macOS (Apple rule); this uses a free macOS CI runner so you don't need a Mac.
+  # A distributable/TestFlight build needs an Apple Developer account ($99/yr) + signing secrets:
+  #   APPLE_DEVELOPMENT_TEAM, APPLE_CERTIFICATE (base64 .p12), APPLE_CERTIFICATE_PASSWORD,
+  #   APPLE_API_ISSUER, APPLE_API_KEY, APPLE_API_KEY_ID  (see https://v2.tauri.app/distribute/sign/ios/).
+  # Without those secrets it just COMPILES the app as a sanity check. continue-on-error so it never blocks
+  # the desktop/Android release. NOTE: untested on a real runner yet — expect minor first-run tweaks.
+  ios:
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+      - run: npm ci
+      - name: Init iOS project
+        run: npm run tauri -- ios init
+      - name: Build iOS app
+        env:
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+        run: |
+          if [ -n "$APPLE_DEVELOPMENT_TEAM" ]; then
+            npm run tauri -- ios build
+          else
+            echo "::warning::No APPLE_DEVELOPMENT_TEAM secret — compile-only sanity build (no signed .ipa)."
+            npm run tauri -- ios build --target aarch64-sim
+          fi
+      - name: Upload .ipa (if produced)
+        if: ${{ hashFiles('src-tauri/gen/apple/build/**/*.ipa') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: wove-ios-ipa
+          path: src-tauri/gen/apple/build/**/*.ipa

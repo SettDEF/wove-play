@@ -11,7 +11,10 @@ import { CrossArt } from "./CrossArt";
 // (native) makes a re-fetch after eviction cheap, so a few hundred resident entries is plenty.
 let cacheMax = 800; // adjustable via Settings → Performance (setCoverCacheLimit)
 const cache = new Map<string, string | null>();
-const pending = new Set<string>();
+// In-flight fetches keyed by path → a SHARED promise. Concurrent requesters of the same cover (e.g. the
+// player's foreground art AND the blurred backdrop) all await this one result, instead of the first
+// requester "winning" the fetch and the others getting stuck on null. [cover race fix]
+const inflight = new Map<string, Promise<string | null>>();
 const cacheGet = (path: string): string | null | undefined => {
   if (!cache.has(path)) return undefined;
   const v = cache.get(path)!;
@@ -75,7 +78,7 @@ export function deprioritizeCovers(ms = 700) {
 }
 
 /** Drop the in-memory cover cache so art is re-fetched (used after a library rebuild). */
-export function clearCoverCache() { cache.clear(); pending.clear(); }
+export function clearCoverCache() { cache.clear(); inflight.clear(); }
 
 /**
  * Fetch a track's embedded album-art thumbnail (cached across the app, concurrency-capped).
@@ -91,14 +94,20 @@ export function useCover(path?: string, gate?: React.RefObject<HTMLElement | nul
     if (hit !== undefined) { setUrl(hit); return; }
     let alive = true;
     const startFetch = () => {
-      if (!alive || pending.has(path)) return;
-      pending.add(path);
-      schedule(() => {
-        if (!alive) { pending.delete(path); return Promise.resolve(); } // scrolled away before its turn → skip the fetch
-        return coverArt(path)
-          .then((u) => { cacheSet(path, u); pending.delete(path); if (alive) setUrl(u); })
-          .catch(() => { pending.delete(path); });
-      });
+      if (!alive) return;
+      // Reuse the in-flight fetch for this path if one exists, else start one. Either way THIS component
+      // attaches to the shared promise, so every requester (foreground cover + backdrop) gets the result.
+      let p = inflight.get(path);
+      if (!p) {
+        p = new Promise<string | null>((resolve) => {
+          schedule(() => coverArt(path)
+            .then((u) => { cacheSet(path, u); resolve(u); })
+            .catch(() => { resolve(null); })
+            .finally(() => { inflight.delete(path); }));
+        });
+        inflight.set(path, p);
+      }
+      void p.then((u) => { if (alive) setUrl(u); });
     };
     const el = gate?.current;
     if (el && typeof IntersectionObserver !== "undefined") {

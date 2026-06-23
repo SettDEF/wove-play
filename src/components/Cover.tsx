@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { coverArt, isAndroid } from "@/lib/backend";
+import { coverArtStrict, isAndroid } from "@/lib/backend";
 import { engine } from "@/audio/engine";
 import { useSettings } from "@/store/settings";
 import { Icon } from "./Icons";
@@ -100,10 +100,20 @@ export function useCover(path?: string, gate?: React.RefObject<HTMLElement | nul
       let p = inflight.get(path);
       if (!p) {
         p = new Promise<string | null>((resolve) => {
-          schedule(() => coverArt(path)
-            .then((u) => { cacheSet(path, u); resolve(u); })
-            .catch(() => { resolve(null); })
-            .finally(() => { inflight.delete(path); }));
+          schedule(async () => {
+            try {
+              let u: string | null;
+              try { u = await coverArtStrict(path); }
+              // A just-started track can briefly lock its art off slow storage (the very reason covers are
+              // deprioritized at track start). Retry ONCE after a beat before giving up.
+              catch { await new Promise((r) => setTimeout(r, 600)); u = await coverArtStrict(path); }
+              cacheSet(path, u); resolve(u);          // a real result (art OR genuine no-art) → safe to cache
+            } catch {
+              resolve(null);                          // transient failure even after the retry → DON'T cache,
+            } finally {                               // so re-viewing the track refetches instead of staying blank
+              inflight.delete(path);
+            }
+          });
         });
         inflight.set(path, p);
       }

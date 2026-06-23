@@ -727,6 +727,8 @@ img { -webkit-user-drag: none; }
   font-weight: 800; font-size: 23px; line-height: 1; box-shadow: var(--md-elev-1);
   outline: 2px solid transparent; outline-offset: 2px; transition: transform .12s, outline-color .15s;
 }
+/* the real icon mark, optically centred in the tile's safe zone (grid place-items already centres it) */
+.wp-icontile-mark { width: 64%; height: 64%; display: block; }
 .wp-icontile:active .wp-icontile-art { transform: scale(.93); }
 .wp-icontile-on .wp-icontile-art { outline-color: var(--md-primary); }
 .wp-icontile-label { font-size: 11px; color: var(--md-on-surface-variant); }
@@ -973,9 +975,23 @@ img { -webkit-user-drag: none; }
 /* ONE horizontally-scrolling row of library tabs (swipe or tap). No wrap; hidden scrollbar. */
 /* Tab row + a pinned overflow (⋯) button that holds the folder/add/reindex actions in a popover, so the
    top header stays clean. The row scrolls; the ⋯ button stays put on the right. */
-.wp-tabs-bar { display: flex; align-items: center; gap: 4px; }
-.wp-tabs-bar .wp-tabs-row { flex: 1; min-width: 0; }
-.wp-libmenu-wrap { position: relative; flex-shrink: 0; align-self: flex-start; }
+.wp-tabs-bar { position: relative; }
+/* the row spans the full width and scrolls UNDERNEATH the ⋯ button; right padding lets the last tab
+   clear the button so it stays reachable. */
+.wp-tabs-bar .wp-tabs-row { min-width: 0; padding-right: 46px; }
+/* ⋯ floats over the right edge so tabs slide beneath it. NO colour plate — instead a feathered
+   backdrop-blur: a tab scrolling under is just frosted/obscured (the background shows through, no black
+   added), fading in from the left via the mask. top/bottom inset matches the tab row's padding so the
+   dots sit on the chips' vertical centre. pointer-events pass through the feather; only the button is hit. */
+.wp-libmenu-wrap {
+  position: absolute; right: 0; top: 2px; bottom: 8px; z-index: 2;
+  display: flex; align-items: center; padding-left: 30px; pointer-events: none;
+  background: none;
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 55%, #000 100%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 55%, #000 100%);
+}
+.wp-libmenu-wrap > * { pointer-events: auto; }
 .wp-libmenu {
   position: absolute; right: 0; top: calc(100% + 2px); z-index: 40; min-width: 210px;
   background: var(--md-surface-container-high); border: 1px solid color-mix(in srgb, var(--md-outline-variant) 70%, transparent);
@@ -1297,6 +1313,12 @@ img { -webkit-user-drag: none; }
 .wp-set-icon { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0;
   border-radius: var(--md-shape-full); background: var(--md-surface-container-highest); color: var(--md-on-surface-variant); }
 .wp-set-control { flex-shrink: 0; display: flex; align-items: center; }
+/* Rows whose control is a wide multi-option segmented control: drop the control onto its own full-width
+   line under the title, so a narrow (small-desktop / phone) width can't crush the title into a
+   one-letter column. The control aligns under the title (icon width + gap) and the seg spans the row. */
+.wp-set-row-wide { flex-wrap: wrap; align-items: flex-start; row-gap: 8px; }
+.wp-set-row-wide > .wp-set-control { flex: 1 1 100%; margin-left: 52px; }
+.wp-set-row-wide > .wp-set-control .wp-seg { flex: 1; width: 100%; }
 .wp-btn-sm { height: 34px; padding: 0 16px; font-size: 13px; }
 
 /* ── Touch ergonomics: bigger tap targets on coarse (finger) pointers ──────── */
@@ -2063,6 +2085,20 @@ img { -webkit-user-drag: none; }
    floating tab dock is gone). Kept in the DOM so toggling it back later is a one-line change. */
 .wp-appbg-scrim { position: absolute; inset: 0; background: transparent; }
 :root[data-theme="light"] .wp-appbg-scrim { background: transparent; }
+/* Legibility over the blurred art: list/tile text sits directly on the artwork, so over BRIGHT album art
+   it washed out. A soft contrast halo (text-shadow inherits to every child line) keeps titles + subtitles
+   readable over ANY artwork without dimming the art itself. Halo is dark in dark theme (light text), light
+   in light theme (dark text). Only applied when the blurred background is actually on. */
+:root[data-appbg="blur"] .wp-row-text,
+:root[data-appbg="blur"] .wp-tile-title,
+:root[data-appbg="blur"] .wp-song-tile-title {
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .72), 0 0 2px rgba(0, 0, 0, .55);
+}
+:root[data-theme="light"][data-appbg="blur"] .wp-row-text,
+:root[data-theme="light"][data-appbg="blur"] .wp-tile-title,
+:root[data-theme="light"][data-appbg="blur"] .wp-song-tile-title {
+  text-shadow: 0 1px 3px rgba(255, 255, 255, .85), 0 0 2px rgba(255, 255, 255, .7);
+}
 /* On the player, this full-window backdrop fills the strip behind the floating nav (the player's own
    backdrop is clipped to the content area). Match the player backdrop's blur/saturation EXACTLY so the
    two are one seamless image — no darker, blurrier band under the dock. */

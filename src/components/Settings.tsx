@@ -10,6 +10,7 @@ import { toast } from "@/store/toasts";
 import { useSettings, type ExportRes, type ExportFps, type NotifButton, type PerfMode, NOTIF_BUTTONS, NOTIF_BUTTONS_MAX, NP_FOOTER_MODES } from "@/store/settings";
 import { PERF_MODES, CUSTOM_CARD } from "@/lib/perfModes";
 import { APP_ICONS } from "@/lib/appIcons";
+import { AppIconMark } from "./AppIconMark";
 import { useTheme, ACCENTS } from "@/store/theme";
 import { useSleep, sleepRemaining } from "@/store/sleep";
 import { hasTauri, isAndroid, saveTextFile, cacheClear, clearIndex, coverCacheClear, openUrl, libClear } from "@/lib/backend";
@@ -171,9 +172,9 @@ function PodcastLauncher() {
   </>);
 }
 
-function Row({ icon, title, sub, info, children }: { icon?: string; title: string; sub?: string; info?: { title: string; body: string }; children?: React.ReactNode }) {
+function Row({ icon, title, sub, info, wide, children }: { icon?: string; title: string; sub?: string; info?: { title: string; body: string }; wide?: boolean; children?: React.ReactNode }) {
   return (
-    <div className="wp-set-row">
+    <div className={`wp-set-row${wide ? " wp-set-row-wide" : ""}`}>
       {icon && <span className="wp-set-icon"><Icon name={icon} size={20} /></span>}
       <div className="wp-row-text">
         <div className="wp-set-title-line">
@@ -464,8 +465,8 @@ export function Settings() {
             <div className="wp-iconpick">
               {APP_ICONS.map((v) => (
                 <button key={v.id} className={`wp-icontile ${s.appIcon === v.id ? "wp-icontile-on" : ""}`} title={v.label} onClick={() => s.setAppIcon(v.id)}>
-                  <span className="wp-icontile-art" style={{ background: v.bg, color: v.fg }}>
-                    {v.glyph ? <Icon name={v.glyph} size={26} /> : "W"}
+                  <span className="wp-icontile-art" style={{ background: v.bg }}>
+                    <AppIconMark id={v.id} fg={v.fg} />
                   </span>
                   <span className="wp-icontile-label">{v.label}</span>
                 </button>
@@ -529,6 +530,9 @@ export function Settings() {
           <Row icon="play" title={t("settings.nav.vinyl")} sub={t("settings.nav.vinylSub")}>
             <Seg value={s.navVinyl} options={[{ id: "off", label: t("settings.nav.off") }, { id: "playing", label: t("settings.nav.playing") }, { id: "always", label: t("settings.nav.always") }]} onChange={s.setNavVinyl} />
           </Row>
+          <Row icon="play" title={t("settings.nav.centerIcon")} sub={t("settings.nav.centerIconSub")}>
+            <Seg value={s.navCenterIcon} options={[{ id: "disc", label: t("settings.nav.disc") }, { id: "ring", label: t("settings.nav.ring") }]} onChange={s.setNavCenterIcon} />
+          </Row>
           <Row icon="tune" title={t("settings.nav.indicator")} sub={t("settings.nav.indicatorSub")}>
             <Seg value={s.navIndicator} options={[{ id: "pill", label: t("settings.nav.pill") }, { id: "plain", label: t("settings.nav.plain") }, { id: "shape", label: t("settings.nav.shape") }]} onChange={s.setNavIndicator} />
           </Row>
@@ -544,7 +548,7 @@ export function Settings() {
               </div>
             </>
           )}
-          <RestoreRow keys={["fontScale", "density", "startScreen", "lockPortrait", "scrollbar", "scrollIndicator", "lazyCovers", "lockscreen", "navVinyl", "navIndicator", "navShape"]} label={t("settings.look.layout")} />
+          <RestoreRow keys={["fontScale", "density", "startScreen", "lockPortrait", "scrollbar", "scrollIndicator", "lazyCovers", "lockscreen", "navVinyl", "navCenterIcon", "navIndicator", "navShape"]} label={t("settings.look.layout")} />
         </>)}
 
         {lookTab === "player" && (<>
@@ -552,7 +556,7 @@ export function Settings() {
             <Switch on={s.audioSections} onToggle={() => s.setAudioSections(!s.audioSections)} />
           </Row>
           <div className={s.audioSections ? "" : "wp-disabled"}>
-            <Row icon="graphicEq" title={t("settings.appearance.seekStyle")} sub={t("settings.appearance.seekStyleSub")}>
+            <Row wide icon="graphicEq" title={t("settings.appearance.seekStyle")} sub={t("settings.appearance.seekStyleSub")}>
               <Seg value={s.seekStyle} options={[{ id: "sections", label: t("settings.appearance.seekSections") }, { id: "waveform", label: t("settings.appearance.seekWave") }, { id: "wavy", label: "Wavy" }, { id: "slider", label: t("settings.appearance.seekBar") }]} onChange={s.setSeekStyle} />
             </Row>
             {s.seekStyle === "wavy" && (<>
@@ -566,7 +570,7 @@ export function Settings() {
             <Row icon="graphicEq" title={t("settings.appearance.sectionAnim")} sub={t("settings.appearance.sectionAnimSub")}>
               <Switch on={s.sectionAnim} onToggle={() => s.setSectionAnim(!s.sectionAnim)} />
             </Row>
-            <Row icon="tune" title={t("settings.appearance.sectionFocus")} sub={t("settings.appearance.sectionFocusSub")}>
+            <Row wide icon="tune" title={t("settings.appearance.sectionFocus")} sub={t("settings.appearance.sectionFocusSub")}>
               <Seg value={s.sectionFocus} options={[
                 { id: "auto", label: t("settings.appearance.sectionFocus.auto") },
                 { id: "hold", label: t("settings.appearance.sectionFocus.hold") },

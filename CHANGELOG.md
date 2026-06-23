@@ -4,6 +4,15 @@ All notable changes to Wove. This mirrors the in-app **What's new** screen
 (source of truth: `src/lib/changelog.ts`). Latest release builds are on the
 [Releases page](https://github.com/SettDEF/wove-play/releases).
 
+## 0.2.2 — Jun 2026
+
+- Album art that sometimes wouldn't load in the player now loads reliably (a brief read at track start retries instead of going blank)
+- Text stays readable over the blurred-art background, even on bright covers
+- New "Ring" player icon — a gapped ring on the centre nav tab that visibly spins while playing (Settings → Look → Nav)
+- Library: the folder / add / reindex menu is now a tidy bottom sheet on Android, and the tab bar reads cleaner
+- Faster launch — the "W" splash settles quicker, and the app-icon picker shows the real, centred marks
+- Fixes: the Settings "Audio timeline" row layout, and more
+
 ## 0.2.1 — Jun 2026
 
 - New optional "Waveform" seek style — a real, on-device waveform that loads when you pick it (Settings → Look)

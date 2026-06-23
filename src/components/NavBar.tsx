@@ -28,6 +28,10 @@ const GLYPH: Record<string, ReactNode> = {
   playing: (<><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.4" /></>),
   settings: (<><path d="M4 7h16" /><path d="M4 12h16" /><path d="M4 17h16" /><circle cx="9" cy="7" r="2.4" fill="currentColor" stroke="none" /><circle cx="15" cy="12" r="2.4" fill="currentColor" stroke="none" /><circle cx="8" cy="17" r="2.4" fill="currentColor" stroke="none" /></>),
 };
+// Alternate centre glyph: a ring with a GAP cut out of the outline (circumference ≈ 56.5 → "44 12.5"
+// leaves one ~80° gap) so the spin-while-playing is actually visible (a full circle looks static
+// spinning). Same centre dot as the disc.
+const PLAYING_RING: ReactNode = (<><circle cx="12" cy="12" r="9" strokeDasharray="44 12.5" /><circle cx="12" cy="12" r="2.4" /></>);
 
 const HOLD_MS = 240;
 
@@ -97,6 +101,7 @@ export function NavBar() {
   const curPath = usePlayer((s) => s.current()?.path);
   const art = useCover(curPath); // the nav carries its own blurred album-art tint (like the mini-player)
   const navVinyl = useSettings((s) => s.navVinyl);
+  const navCenterIcon = useSettings((s) => s.navCenterIcon);
   const navIndicator = useSettings((s) => s.navIndicator);
   const navShape = useSettings((s) => s.navShape) as MaterialShapeName;
   // The centre (Player) tab spins like a record: always, only while playing, or never.
@@ -176,7 +181,7 @@ export function NavBar() {
                   <MaterialShape shape={navShape} size={d.tab === "playing" ? 50 : 46} color="var(--md-secondary-container)" className="wp-nav-shape" />
                 </Suspense>
               )}
-              <svg className={`wp-nav-glyph ${d.tab === "playing" && vinylSpin ? "wp-nav-spin" : ""}`} viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{GLYPH[d.tab]}</svg>
+              <svg className={`wp-nav-glyph ${d.tab === "playing" && vinylSpin ? "wp-nav-spin" : ""}`} viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{d.tab === "playing" && navCenterIcon === "ring" ? PLAYING_RING : GLYPH[d.tab]}</svg>
             </span>
           </button>
           );

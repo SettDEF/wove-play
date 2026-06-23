@@ -55,6 +55,7 @@ interface Stored {
   scrollbar: "thin" | "normal" | "hidden" | "overlay"; // scrollbar style
   scrollIndicator: "off" | "bubble" | "az" | "auto"; // big-list scroll UI: none / fast-scroll bubble / A–Z index rail / auto (rail for A–Z sorts, bubble for numeric)
   navVinyl: "off" | "playing" | "always"; // spin the centre (Player) nav tab like a vinyl record
+  navCenterIcon: "disc" | "ring"; // centre (Player) glyph: solid vinyl disc / gapped ring (the gap makes the spin visible)
   navIndicator: "pill" | "plain" | "shape"; // active nav-tab background: rounded pill / none / a Material shape
   navShape: string; // Material shape name for the active tab when navIndicator === "shape"
   appIcon: string;  // chosen alternate app-icon variant id (Android launcher alias; see lib/appIcons)
@@ -171,7 +172,7 @@ const DEFAULTS: Stored = {
   fontScale: 1, uiZoom: 1, density: "cozy", lyricsProvider: "google", appBg: "blur", bgBlur: 64, bgSaturation: 1.5,
   eqValues: "db", toneValues: "db",
   waveSeek: true, onboarded: false, scrollbar: "thin", scrollIndicator: "auto", seekStyle: "sections", waveAmp: 4, waveSpeed: 1, autoTag: false, tagOnline: false, tagWriteFile: false, sectionAnim: true, sectionFocus: "auto", audioSections: true, mixDetect: false, soundDna: true,
-  navVinyl: "playing", navIndicator: "pill", navShape: "cookie6Sided", appIcon: "default",
+  navVinyl: "playing", navCenterIcon: "disc", navIndicator: "pill", navShape: "cookie6Sided", appIcon: "default",
   // library / analysis
   lazyCovers: false, showBpm: true, skipIntros: false, nativeAudio: DESKTOP_LINUX, startScreen: "last", openPlayerOnPlay: true, lockPortrait: false,
   bpmAlgo: "native", sectionAlgo: "structural",
@@ -244,6 +245,7 @@ interface SettingsState extends Stored {
   setScrollbar: (s: "thin" | "normal" | "hidden" | "overlay") => void;
   setScrollIndicator: (s: "off" | "bubble" | "az" | "auto") => void;
   setNavVinyl: (v: Stored["navVinyl"]) => void;
+  setNavCenterIcon: (v: Stored["navCenterIcon"]) => void;
   setNavIndicator: (v: Stored["navIndicator"]) => void;
   setNavShape: (v: string) => void;
   setAppIcon: (id: string) => void;
@@ -475,6 +477,7 @@ export const useSettings = create<SettingsState>((set, get) => {
     setScrollbar: (scrollbar) => { set({ scrollbar }); save(); get().applyUi(); },
     setScrollIndicator: (scrollIndicator) => { set({ scrollIndicator }); save(); },
     setNavVinyl: (navVinyl) => { set({ navVinyl }); save(); },
+    setNavCenterIcon: (navCenterIcon) => { set({ navCenterIcon }); save(); },
     setNavIndicator: (navIndicator) => { set({ navIndicator }); save(); get().applyUi(); },
     setNavShape: (navShape) => { set({ navShape }); save(); },
     setAppIcon: (appIcon) => { set({ appIcon }); save(); import("@/lib/nativeMedia").then((m) => m.nativeSetAppIcon(appIcon)); },

@@ -1,11 +1,19 @@
 /** Single source of truth for the app version + changelog (shown in Settings AND the launch "What's new"
  *  popup). Bump APP_VERSION + add a CHANGELOG entry on every release — the popup auto-shows it once. */
 
-export const APP_VERSION = "0.2.1"; // keep in sync with package.json + tauri.conf.json
+export const APP_VERSION = "0.2.2"; // keep in sync with package.json + tauri.conf.json
 
 export interface ChangelogEntry { v: string; date: string; notes: string[] }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { v: "0.2.2", date: "Jun 2026", notes: [
+    "Album art that sometimes wouldn’t load in the player now loads reliably (a brief read at track start retries instead of going blank)",
+    "Text stays readable over the blurred-art background, even on bright covers",
+    "New “Ring” player icon — a gapped ring on the centre nav tab that visibly spins while playing (Settings → Look → Nav)",
+    "Library: the folder / add / reindex menu is now a tidy bottom sheet on Android, and the tab bar reads cleaner",
+    "Faster launch — the “W” splash settles quicker, and the app-icon picker shows the real, centred marks",
+    "Fixes: the Settings “Audio timeline” row layout, and more",
+  ] },
   { v: "0.2.1", date: "Jun 2026", notes: [
     "New optional “Waveform” seek style — a real, on-device waveform that loads when you pick it (Settings → Look)",
     "Browse: more categories (Never Played, Shuffle All) + fixed the Low Rated icon",

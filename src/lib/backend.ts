@@ -671,11 +671,21 @@ export async function libClear(): Promise<void> {
 
 export async function coverArt(path: string): Promise<string | null> {
   if (!hasTauri) return null;
+  try { return await coverArtStrict(path); } catch { return null; }
+}
+/** Like {@link coverArt} but THROWS on a native/IPC error instead of swallowing it as `null`. This lets
+ *  the cover cache tell a TRANSIENT failure (e.g. MediaMetadataRetriever briefly locked while a just-
+ *  started track buffers off slow storage → retry) apart from a GENUINE "no embedded art" (`null`, safe
+ *  to remember). Swallowing both as null cached a transient miss permanently → "the cover sometimes
+ *  doesn't load in the player". */
+export async function coverArtStrict(path: string): Promise<string | null> {
+  if (!hasTauri) return null;
   // Android SAF URIs can't be read by the desktop cover_art path — use MediaMetadataRetriever natively.
   if (path.startsWith("content://")) {
-    try { const r = await invoke<{ data?: string | null }>("cover_uri", { uri: path }); return r?.data ?? null; } catch { return null; }
+    const r = await invoke<{ data?: string | null }>("cover_uri", { uri: path });
+    return r?.data ?? null;
   }
-  try { return await invoke<string | null>("cover_art", { path }); } catch { return null; }
+  return await invoke<string | null>("cover_art", { path });
 }
 
 export interface TagEdit {

@@ -67,6 +67,11 @@ npm run android:init     # once
 npm run android:dev      # or: tauri android build --apk  (needs JDK 17 + NDK)
 ```
 
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for per-version notes, or the
+[Releases page](https://github.com/SettDEF/wove-play/releases) for downloads.
+
 ## Roadmap
 
 Planned / ideas (unordered, not promises):
